@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero section-wrap">
+  <div class="hero-copy">
+    <div class="eyebrow"><span class="eyebrow-line"></span> Self-hosted SOL payments</div>
+    <h1>Your customers shouldn’t need support for an overpayment.</h1>
+    <p class="hero-lede">RemaSol verifies the payment, isolates the excess, and gives the customer a safe path to recover it — with the proof on-chain.</p>
+    <div class="hero-actions">
+      <a class="button button-primary" href="{{ url_for('main.merchant_dashboard') }}">Open merchant console {{ icon('arrow-up-right', 17) }}</a>
+      <a class="text-link" href="#how-it-works">See how recovery works {{ icon('arrow-right', 16) }}</a>
+    </div>
+    <div class="hero-note"><span class="status-check">{{ icon('check', 13) }}</span> Built for small merchants who accept direct SOL payments</div>
+  </div>
+  <div class="hero-visual" aria-label="Example of a verified overpayment ready to return">
+    <div class="visual-grid"></div>
+    <div class="settlement-card">
+      <div class="settlement-top"><span class="mono-label">Payment room / 0042</span><span class="live-indicator"><span></span> Live</span></div>
+      <div class="settlement-amount"><span>0.45</span> SOL</div>
+      <p class="settlement-caption">Excess verified and ready to return</p>
+      <div class="settlement-rule"></div>
+      <div class="settlement-row"><span>Product price</span><strong>0.05 SOL</strong></div>
+      <div class="settlement-row"><span>Received</span><strong>0.50 SOL</strong></div>
+      <div class="settlement-row accent-row"><span>Refundable excess</span><strong>0.45 SOL</strong></div>
+      <div class="settlement-destination"><span class="destination-icon">{{ icon('lock', 15) }}</span><span><small>Locked destination</small><b>7xKp…w9Fq</b></span><span class="destination-verified">{{ icon('check', 13) }}</span></div>
+    </div>
+    <div class="visual-stamp">{{ icon('shield', 18) }} Verified on Solana</div>
+  </div>
+</section>
+
+<section class="proof-strip section-wrap" aria-label="RemaSol principles">
+  <div><span class="proof-number">01</span><span>Unique payment rooms</span></div>
+  <div><span class="proof-number">02</span><span>Private claim credentials</span></div>
+  <div><span class="proof-number">03</span><span>Finalized transaction proof</span></div>
+</section>
+
+<section class="split-section section-wrap" id="how-it-works">
+  <div class="section-intro">
+    <div class="eyebrow"><span class="eyebrow-line"></span> The gap RemaSol closes</div>
+    <h2>One accidental extra transfer shouldn’t become a support ticket.</h2>
+  </div>
+  <div class="section-body">
+    <p>A merchant can sell a digital product for 0.05 SOL and receive 0.50 SOL. RemaSol makes the difference legible, verifiable, and recoverable without asking the customer to explain the mistake over email.</p>
+    <a class="text-link" href="{{ url_for('main.recover') }}">Try the recovery page {{ icon('arrow-right', 16) }}</a>
+  </div>
+</section>
+
+<section class="feature-section section-wrap">
+  <div class="feature-card feature-card-large">
+    <div class="feature-icon">{{ icon('wallet', 19) }}</div>
+    <h3>A payment room for every order</h3>
+    <p>Each checkout gets its own Devnet address, so an incoming transfer can be matched to exactly one order — even when an exchange hot wallet is involved.</p>
+    <div class="feature-wire"><span>order</span><i></i><span>payment room</span><i></i><span>verified outcome</span></div>
+  </div>
+  <div class="feature-card feature-card-dark">
+    <div class="feature-icon violet">{{ icon('lock', 19) }}</div>
+    <h3>Locked before the payment</h3>
+    <p>The refund destination is captured before payment and cannot be edited after the order is created.</p>
+    <div class="mini-code"><span class="mini-code-dot"></span> claim code / bearer credential</div>
+  </div>
+  <div class="feature-card feature-card-gold">
+    <div class="feature-icon gold">{{ icon('shield', 19) }}</div>
+    <h3>One payout, recorded durably</h3>
+    <p>SQLite constraints and an atomic refund state machine make repeat clicks return the existing status instead of creating another payout.</p>
+    <div class="mini-state"><span>{{ icon('check', 13) }}</span> idempotent by design</div>
+  </div>
+</section>
+
+<section class="steps-section section-wrap">
+  <div class="steps-heading"><div class="eyebrow"><span class="eyebrow-line"></span> Simple by design</div><h2>Three moments. One clear handoff.</h2></div>
+  <div class="steps-grid">
+    <div class="step"><span class="step-mark">01</span><h3>Create a product</h3><p>Set a price in SOL and share a checkout link.</p></div>
+    <div class="step"><span class="step-mark">02</span><h3>Verify the transfer</h3><p>RemaSol reads finalized Devnet instructions, not screenshots.</p></div>
+    <div class="step"><span class="step-mark">03</span><h3>Return the excess</h3><p>The customer requests one refund to the locked destination.</p></div>
+  </div>
+</section>
+
+<section class="closing-cta section-wrap">
+  <div><div class="eyebrow"><span class="eyebrow-line"></span> Start with a safe demo</div><h2>Keep the payment.<br><em>Return the extra.</em></h2></div>
+  <div class="cta-side"><p>RemaSol is a Devnet prototype for self-hosted merchants. The core flow is real; mainnet custody and exchange-specific handling still need production hardening.</p><a class="button button-primary" href="{{ url_for('main.merchant_dashboard') }}">Build a payment room {{ icon('arrow-up-right', 17) }}</a></div>
+</section>
+{% endblock %}

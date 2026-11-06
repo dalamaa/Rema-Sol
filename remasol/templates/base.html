@@ -1,0 +1,59 @@
+{% from "_icons.html" import icon %}
+<!doctype html>
+<html lang="en" style="color-scheme: dark;">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0a0d16">
+  <title>{% if title %}{{ title }} · {% endif %}RemaSol</title>
+  <meta name="description" content="RemaSol helps self-hosted Solana merchants return accidental overpayments with clear on-chain proof.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Orbitron:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <div class="app-shell">
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <header class="topbar">
+      <a class="brand" href="{{ url_for('main.home') }}" aria-label="RemaSol home">
+        <span class="brand-mark"><span></span></span>
+        <span>Rema<span>Sol</span></span>
+      </a>
+      <nav class="main-nav" aria-label="Primary navigation">
+        <a href="{{ url_for('main.merchant_dashboard') if merchant_authenticated else url_for('main.merchant_login') }}">Merchant console</a>
+        <a href="{{ url_for('main.recover') }}">Recover a payment</a>
+      </nav>
+      <div class="topbar-actions">
+        <span class="network-pill"><span class="network-dot"></span> Devnet</span>
+        {% if request.endpoint not in ['main.merchant_dashboard', 'main.merchant_login'] %}<a class="button button-small button-quiet" href="{{ url_for('main.merchant_dashboard') if merchant_authenticated else url_for('main.merchant_login') }}">Open console {{ icon('arrow-up-right', 15) }}</a>{% endif %}
+      </div>
+    </header>
+    <nav class="mobile-nav section-wrap" aria-label="Mobile navigation">
+      <a href="{{ url_for('main.merchant_dashboard') if merchant_authenticated else url_for('main.merchant_login') }}">Merchant console</a>
+      <a href="{{ url_for('main.recover') }}">Recover a payment</a>
+    </nav>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-stack" aria-live="polite">
+          {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">{{ icon('check' if category == 'success' else 'alert', 16) }}<span>{{ message }}</span></div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <main id="main-content">
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="site-footer">
+      <div class="footer-brand"><span class="brand-mark small"><span></span></span> RemaSol</div>
+      <span>Self-hosted payment recovery for Solana Devnet</span>
+      <span class="footer-note">No mainnet custody. No unsupported promises.</span>
+    </footer>
+  </div>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

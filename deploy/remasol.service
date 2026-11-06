@@ -1,0 +1,21 @@
+[Unit]
+Description=RemaSol Flask application
+After=network.target
+
+[Service]
+Type=simple
+User=remasol
+Group=remasol
+WorkingDirectory=/srv/remasol
+EnvironmentFile=/etc/remasol/remasol.env
+ExecStart=/srv/remasol/.venv/bin/gunicorn --workers 2 --bind 127.0.0.1:8000 --access-logfile - --error-logfile - app:app
+Restart=on-failure
+RestartSec=5
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/remasol
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="receipt-shell section-wrap">
+  <div class="receipt-header"><div class="receipt-success-mark {{ 'receipt-review-mark' if state not in ['finalized', 'submitted'] else '' }}">{{ icon('check' if state in ['finalized', 'submitted'] else 'alert', 27) }}</div><div><div class="eyebrow"><span class="eyebrow-line"></span> RemaSol receipt</div><h1>{% if state == 'finalized' %}Refund finalized.{% elif state == 'submitted' %}Refund submitted.{% else %}Refund needs review.{% endif %}</h1><p>{{ 'The signed transaction reached finalized status on Solana Devnet.' if state == 'finalized' else 'The signed transaction is recorded. RemaSol will not create a second payout while its outcome is unresolved.' if state == 'submitted' else 'No second payout was attempted. The durable record is ready for manual review.' }}</p></div></div>
+  <div class="receipt-grid">
+    <div class="receipt-card receipt-amount-card"><span class="metric-label">Refunded excess</span><strong>{{ order.refund_amount_lamports|sol }} <small>SOL</small></strong><span class="receipt-sub">Product payment {{ order.payment_sol }} SOL · price {{ order.price_sol }} SOL</span></div>
+    <div class="receipt-card"><span class="metric-label">Destination</span><code class="receipt-code">{{ order.refund_destination }}</code><span class="receipt-sub">Locked before payment</span></div>
+    <div class="receipt-card"><span class="metric-label">Refund record</span><code class="receipt-code">{{ order.refund_id }}</code><span class="receipt-sub">Idempotent payout identity</span></div>
+    <div class="receipt-card"><span class="metric-label">Finalized at</span><strong class="receipt-date">{{ order.finalized_at[:19].replace('T', ' ') if order.finalized_at else 'Pending confirmation' }}</strong><span class="receipt-sub">UTC · Devnet only</span></div>
+  </div>
+  {% if order.transaction_signature %}
+  <div class="transaction-proof"><div><span class="panel-kicker">On-chain proof</span><h2>Inspect the exact refund transaction</h2><code>{{ order.transaction_signature }}</code></div><a class="button button-primary" href="{{ explorer_url }}" target="_blank" rel="noreferrer">Open Solana Explorer {{ icon('external', 16) }}</a></div>
+  {% endif %}
+  <div class="receipt-footer-note">{{ icon('info', 15) }} A finalized transaction confirms the Devnet transfer. It does not guarantee how a centralized exchange credits an account.</div>
+</section>
+{% endblock %}

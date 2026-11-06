@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="login-shell section-wrap">
+  <div class="login-intro"><div class="eyebrow"><span class="eyebrow-line"></span> Private merchant access</div><h1>Your payment rooms, under your control.</h1><p>The merchant console is protected separately from customer checkout and recovery. Use the credentials configured on this server.</p></div>
+  <div class="login-card">
+    <div class="panel-heading"><div><span class="panel-kicker">Merchant console</span><h2>Sign in</h2></div><span class="panel-icon">{{ icon('lock', 18) }}</span></div>
+    {% if error %}<div class="inline-error login-error" role="alert">{{ icon('alert', 15) }} {{ error }}</div>{% endif %}
+    <form method="post" action="{{ url_for('main.merchant_login') }}" class="stack-form" data-loading-text="Signing in…">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label>Username<input type="text" name="username" autocomplete="username" value="{{ request.form.get('username', '') }}" required></label>
+      <label>Password<input type="password" name="password" autocomplete="current-password" required></label>
+      <button class="button button-primary button-full" type="submit">Unlock console {{ icon('arrow-right', 16) }}</button>
+    </form>
+    <div class="security-line">{{ icon('shield', 14) }} Merchant credentials never appear in customer pages or URLs.</div>
+  </div>
+</section>
+{% endblock %}

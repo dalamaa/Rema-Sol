@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="dashboard-head section-wrap">
+  <div>
+    <div class="eyebrow"><span class="eyebrow-line"></span> Merchant console / Devnet</div>
+    <h1>Payment recovery, in one view.</h1>
+    <p>Share a checkout link, verify what arrived, and let the customer handle the excess.</p>
+  </div>
+  <div class="dashboard-status"><span class="live-indicator"><span></span> System ready</span><span class="mono-label">SQLite ledger · Devnet RPC</span><form method="post" action="{{ url_for('main.merchant_logout') }}" data-loading-text="Locking…"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="text-button" type="submit">Lock console</button></form></div>
+</section>
+
+<section class="metrics-grid section-wrap">
+  <div class="metric"><span class="metric-label">Products</span><strong>{{ stats.products }}</strong><span class="metric-note">checkout links</span></div>
+  <div class="metric"><span class="metric-label">Orders</span><strong>{{ stats.orders }}</strong><span class="metric-note">payment rooms</span></div>
+  <div class="metric metric-highlight"><span class="metric-label">Overpayments</span><strong>{{ stats.overpayments }}</strong><span class="metric-note">need a customer handoff</span></div>
+  <div class="metric"><span class="metric-label">Refunded</span><strong>{{ stats.refunded }}</strong><span class="metric-note">finalized on Devnet</span></div>
+</section>
+
+<section class="dashboard-grid section-wrap">
+  <div class="panel create-panel">
+    <div class="panel-heading"><div><span class="panel-kicker">New checkout</span><h2>Create a product</h2></div><span class="panel-icon">{{ icon('plus', 19) }}</span></div>
+    <form method="post" action="{{ url_for('main.create_product') }}" class="stack-form" data-loading-text="Creating product…">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      {% if error %}<div class="inline-error" role="alert">{{ icon('alert', 15) }} {{ error }}</div>{% endif %}
+      <label>Product name<input name="name" value="{{ request.form.get('name', '') }}" placeholder="e.g. Field Notes pack" maxlength="120" required></label>
+      <label>Description <span class="optional">Optional</span><textarea name="description" rows="4" maxlength="800" placeholder="What does the customer receive?">{{ request.form.get('description', '') }}</textarea></label>
+      <label>Price in SOL<div class="input-with-suffix"><input name="price" inputmode="decimal" placeholder="0.05" required><span>SOL</span></div></label>
+      <button class="button button-primary button-full" type="submit">Create product {{ icon('arrow-right', 16) }}</button>
+    </form>
+    <div class="form-footnote">Prices are converted to integer lamports before they touch the ledger.</div>
+  </div>
+
+  <div class="panel product-panel">
+    <div class="panel-heading"><div><span class="panel-kicker">Shareable links</span><h2>Your products</h2></div><span class="count-chip">{{ products|length }}</span></div>
+    {% if products %}
+      <div class="product-list">
+        {% for product in products %}
+          <div class="product-row">
+            <div class="product-main"><span class="product-dot"></span><div><strong>{{ product.name }}</strong><span>{{ product.price_sol }} SOL · {{ product.description or 'No description yet' }}</span></div></div>
+            <div class="product-actions"><a class="icon-text-link" href="{{ url_for('main.product_checkout', slug=product.slug) }}" target="_blank" rel="noreferrer">Open {{ icon('arrow-up-right', 14) }}</a><button class="copy-button" data-copy="{{ url_for('main.product_checkout', slug=product.slug, _external=true) }}" type="button">{{ icon('copy', 15) }}<span>Copy link</span></button></div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state"><div class="empty-state-icon">{{ icon('spark', 20) }}</div><h3>Your first payment room starts here.</h3><p>Create a product to get a checkout link you can share.</p></div>
+    {% endif %}
+  </div>
+</section>
+
+<section class="panel orders-panel section-wrap">
+  <div class="panel-heading"><div><span class="panel-kicker">Ledger view</span><h2>Recent orders</h2></div><span class="mono-label">{{ orders|length }} total</span></div>
+  {% if orders %}
+    <div class="table-wrap"><table><thead><tr><th>Product</th><th>Payment room</th><th>Received</th><th>Status</th><th>Refund</th></tr></thead><tbody>
+      {% for order in orders %}<tr><td><strong>{{ order.product_name }}</strong><span class="cell-sub">{{ order.created_at[:16].replace('T', ' ') }} UTC</span></td><td class="mono">{{ order.payment_address|short }}</td><td class="mono">{{ order.payment_sol }} SOL</td><td><span class="status-pill status-{{ order.status }}"><span></span>{{ order.status|status_label }}</span></td><td>{% if order.refund_status %}<span class="status-pill status-{{ order.refund_status }}"><span></span>{{ order.refund_status|status_label }}</span>{% else %}<span class="muted">—</span>{% endif %}</td></tr>{% endfor %}
+    </tbody></table></div>
+  {% else %}
+    <div class="table-empty"><span>{{ icon('database', 20) }}</span><p>No orders yet. Your ledger will appear here as customers check out.</p></div>
+  {% endif %}
+</section>
+{% endblock %}

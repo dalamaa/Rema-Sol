@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="empty-page section-wrap">
+  <div class="empty-mark">{{ icon('alert', 28) }}</div>
+  <div class="eyebrow"><span class="eyebrow-line"></span> RemaSol</div>
+  <h1 role="alert">{{ title }}</h1>
+  <p>{{ message }}</p>
+  <a class="button button-primary" href="{{ url_for('main.home') }}">Return home {{ icon('arrow-right', 16) }}</a>
+</section>
+{% endblock %}
