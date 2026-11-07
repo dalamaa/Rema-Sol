@@ -155,7 +155,7 @@ def test_test_wallet_is_separate_and_only_sends_to_active_checkouts(client, app,
     session_id = test_url.rsplit("/", 1)[-1]
     entry_html = client.get("/wallet").get_data(as_text=True)
     assert "Test History" not in entry_html
-    assert "Maximum Test Payment" in entry_html
+    assert "Max per payment: 0.005 SOL" in entry_html
     assert "recipient_address" not in entry_html
 
     rejected = client.post(
@@ -252,9 +252,9 @@ def test_test_wallet_shows_per_payment_limit_without_balance_display(client, app
     created = client.post("/wallet/create", data={"csrf_token": token})
     assert created.status_code == 302
     wallet_html = client.get("/wallet").get_data(as_text=True)
-    assert "Maximum Test Payment" in wallet_html
-    assert "This maximum resets for every payment" in wallet_html
-    assert "0.005 <small>SOL" in wallet_html
+    assert "Max per payment: 0.005 SOL" in wallet_html
+    assert "Maximum Test Payment" not in wallet_html
+    assert "0.005 <small>SOL" not in wallet_html
     assert "Allocated today" not in wallet_html
     assert "Still unrecovered" not in wallet_html
     assert "earlier test attempts" not in wallet_html
@@ -263,7 +263,7 @@ def test_test_wallet_shows_per_payment_limit_without_balance_display(client, app
     assert "Merchant Code" not in wallet_html
 
     test_page = client.get(created.location).get_data(as_text=True)
-    assert "RemaSol provides free Devnet SOL for test payments." in test_page
+    assert "Send free Devnet SOL to a RemaSol checkout." in test_page
     assert "Allocated today" not in test_page
     assert "Still unrecovered" not in test_page
     assert "Actual temporary wallet balance" not in test_page
@@ -442,7 +442,7 @@ def test_ten_sequential_tests_from_one_browser_get_fresh_wallets(client, app, en
 
     assert len(set(senders)) == 10
     entry = client.get("/wallet").get_data(as_text=True)
-    assert "Maximum Test Payment" in entry
+    assert "Max per payment: 0.005 SOL" in entry
     assert "Available Test Credit" not in entry
     assert "Test History" not in entry
     assert fake_solana.broadcast_calls == 20
@@ -676,7 +676,7 @@ def test_failed_allocation_releases_credit_only_after_sender_is_empty(client, ap
     fake_solana.balances[failed["sender_address"]] = failed["funding_lamports"]
     locked = demo.wallet_page_state(browser_id)
     assert locked["credit_accounting"]["unrecovered_funds_lamports"] == "0.00599088"
-    assert "Maximum Test Payment" in client.get("/wallet").get_data(as_text=True)
+    assert "Max per payment: 0.005 SOL" in client.get("/wallet").get_data(as_text=True)
 
     fake_solana.balances[failed["sender_address"]] = 0
     released = demo.wallet_page_state(browser_id)

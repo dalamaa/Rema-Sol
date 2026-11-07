@@ -389,7 +389,6 @@ def create_test_wallet():
     except DomainError as error:
         state = demo_service().wallet_page_state(wallet_browser_id())
         return render_template("wallet.html", **state, error=str(error), **template_context()), 400
-    flash("Test wallet created. Paste an active RemaSol checkout address to send Devnet SOL.", "success")
     return redirect(url_for("main.wallet_test", session_id=wallet["id"]))
 
 

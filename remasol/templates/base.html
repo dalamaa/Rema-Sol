@@ -39,7 +39,7 @@
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
         <div class="flash-stack" aria-live="polite">
-          {% for category, message in messages %}
+          {% for category, message in messages if message and message|trim %}
             <div class="flash flash-{{ category }}">{{ icon('check' if category == 'success' else 'alert', 16) }}<span>{{ message }}</span></div>
           {% endfor %}
         </div>

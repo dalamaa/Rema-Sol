@@ -34,13 +34,31 @@
   const walletForm = document.querySelector(".wallet-send-form[data-wallet-payment]");
   const resultPanel = document.querySelector("[data-wallet-result]");
   const errorRegion = document.querySelector("[data-wallet-error]");
-  const statusPill = document.querySelector(".wallet-card-actions .status-pill");
 
   const setWalletError = (message) => {
     if (!errorRegion) return;
+    const normalized = typeof message === "string" ? message.trim() : "";
     const messageElement = errorRegion.querySelector("span");
-    if (messageElement) messageElement.textContent = message || "";
-    errorRegion.hidden = !message;
+    if (messageElement) messageElement.textContent = normalized;
+    errorRegion.hidden = !normalized;
+  };
+
+  const focusWalletResult = () => {
+    if (!resultPanel) return;
+    window.requestAnimationFrame(() => {
+      const bounds = resultPanel.getBoundingClientRect();
+      const visible = bounds.top >= 0 && bounds.bottom <= window.innerHeight;
+      resultPanel.focus({ preventScroll: true });
+      if (!visible) {
+        const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+        resultPanel.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "nearest" });
+      }
+    });
+  };
+
+  const focusWalletError = () => {
+    if (!errorRegion) return;
+    window.requestAnimationFrame(() => errorRegion.focus({ preventScroll: false }));
   };
 
   const setFormBusy = (form, busy, label = "Payment in progress") => {
@@ -59,15 +77,15 @@
   const setPaymentFormState = (wallet, localNeedsReview = false) => {
     if (!walletForm) return;
     const button = walletForm.querySelector("button[type='submit']");
-    if (!button) return;
     const status = wallet?.status || "created";
     const stopSending = localNeedsReview || TERMINAL_STATUSES.has(status);
-    button.hidden = stopSending;
-    button.disabled = stopSending;
-    button.removeAttribute("aria-busy");
     walletForm.querySelectorAll("input, select, textarea").forEach((control) => {
       if (control.type !== "hidden") control.disabled = stopSending;
     });
+    if (!button) return;
+    button.hidden = stopSending;
+    button.disabled = stopSending;
+    button.removeAttribute("aria-busy");
     if (!stopSending) {
       button.innerHTML = button.dataset.idleHtml || button.innerHTML;
       button.textContent = wallet?.payment_signature ? "Check payment status" : "Send Test SOL";
@@ -116,30 +134,19 @@
     return form;
   };
 
-  const renderWalletResult = (payload, { localNeedsReview = false } = {}) => {
+  const renderWalletResult = (payload, { localNeedsReview = false, focus = false } = {}) => {
     if (!resultPanel) return;
     const wallet = payload?.wallet || null;
-    const status = localNeedsReview ? "needs_review" : (wallet?.status || payload?.status || "created");
+    const rawStatus = localNeedsReview ? "needs_review" : (wallet?.status || payload?.status || "created");
+    const knownStatus = new Set(["created", ...PROCESSING_STATUSES, ...TERMINAL_STATUSES]);
+    let status = knownStatus.has(rawStatus) ? rawStatus : "needs_review";
+    if (status === "complete" && !wallet?.payment_signature) status = "needs_review";
     const processing = !localNeedsReview && PROCESSING_STATUSES.has(status);
     const confirmed = status === "complete";
     const failed = status === "failed";
     const needsReview = status === "needs_review";
     const sessionId = wallet?.id || walletForm?.elements.session_id?.value || "";
     const csrfToken = resultPanel.dataset.csrfToken || walletForm?.elements.csrf_token?.value || "";
-    const statusText = confirmed
-      ? "Confirmed"
-      : failed
-        ? "Failed"
-        : needsReview
-          ? "Needs Review"
-          : processing
-            ? "Payment in progress"
-            : "Ready to send";
-
-    if (statusPill) {
-      statusPill.className = `status-pill status-${status}`;
-      statusPill.replaceChildren(make("span"), document.createTextNode(statusText));
-    }
 
     resultPanel.dataset.walletStatus = status;
     resultPanel.replaceChildren(make("div", "panel-kicker", "Payment result"));
@@ -148,8 +155,9 @@
       const placeholder = make("div", "demo-result-placeholder");
       placeholder.appendChild(make("div", "placeholder-orbit", "◎"));
       placeholder.appendChild(make("h2", "", "Your transaction will appear here."));
-      placeholder.appendChild(make("p", "", "Enter an active RemaSol checkout address and choose how much test SOL to send."));
+      placeholder.appendChild(make("p", "", "Enter an active checkout address and choose an amount to send."));
       resultPanel.appendChild(placeholder);
+      if (focus) focusWalletResult();
       return;
     }
 
@@ -160,15 +168,15 @@
     else icon.textContent = confirmed ? "✓" : "!";
     resultPanel.appendChild(icon);
 
-    const heading = confirmed ? "Payment confirmed" : failed ? "Payment failed" : needsReview ? "Payment needs review" : "Processing";
+    const heading = confirmed ? "Payment confirmed" : failed ? "Payment failed" : needsReview ? "Payment needs review" : "Payment in progress";
     resultPanel.appendChild(make("h2", "", heading));
     const description = confirmed
-      ? "The Devnet transfer is finalized and recorded below."
+      ? "The verified Devnet transfer is recorded below."
       : failed
-        ? "The payment did not reach the checkout. This saved attempt will not be sent again."
+        ? "The payment did not reach the checkout. No second transfer was created."
         : needsReview
-          ? "The saved payment transaction is being checked without creating a new transfer."
-          : "Payment in progress. The transfer is being checked before it is confirmed.";
+          ? "The saved payment is uncertain. Recheck its status without sending again."
+          : "The transfer is being verified before it is confirmed.";
     resultPanel.appendChild(make("p", "", description));
 
     if (wallet?.payment_signature) {
@@ -190,12 +198,17 @@
       resultPanel.appendChild(make("div", "wallet-result-message", wallet?.last_error || payload.error));
     }
 
-    if (TERMINAL_STATUSES.has(status)) {
+    if (confirmed) {
+      const recovery = make("a", "button button-primary button-full", "Open Recovery");
+      recovery.href = resultPanel.dataset.recoveryAction;
+      resultPanel.appendChild(recovery);
+    } else if (failed) {
       resultPanel.appendChild(actionForm(resultPanel.dataset.newTestAction, csrfToken, "", "New Test"));
     }
     if (needsReview && (wallet?.payment_signature || localNeedsReview)) {
       resultPanel.appendChild(actionForm(resultPanel.dataset.recheckAction, csrfToken, sessionId, "Recheck Payment Status", true));
     }
+    if (focus) focusWalletResult();
   };
 
   const requestWalletState = async (form, { isRecheck = false } = {}) => {
@@ -204,12 +217,18 @@
     const requestBody = new FormData(form);
     const controller = new AbortController();
     let timedOut = false;
+    let finalWallet = null;
+    let localNeedsReview = false;
     const timeoutId = window.setTimeout(() => {
       timedOut = true;
       controller.abort();
     }, PAYMENT_TIMEOUT_MS);
     setFormBusy(form, true, isRecheck ? "Checking payment status" : "Payment in progress");
     setWalletError("");
+    renderWalletResult(
+      { wallet: { id: form.elements.session_id?.value || "", status: "payment_pending" } },
+      { focus: true },
+    );
 
     try {
       const response = await fetch(form.action, {
@@ -228,27 +247,30 @@
       } catch (_error) {
         throw new Error("The payment result was not returned in a readable format.");
       }
+      finalWallet = payload.wallet || null;
       if (!response.ok) {
-        if (payload.wallet?.status === "needs_review") {
-          renderWalletResult(payload);
-          setPaymentFormState(payload.wallet);
-        }
+        if (finalWallet) renderWalletResult(payload, { focus: true });
         setWalletError(payload.error || "The payment request could not be processed.");
+        if (!finalWallet) focusWalletError();
         return;
       }
-      renderWalletResult(payload);
-      setPaymentFormState(payload.wallet);
+      if (!finalWallet) throw new Error("The payment result did not include a saved wallet state.");
+      renderWalletResult(payload, { focus: true });
+      setWalletError("");
     } catch (error) {
       const message = timedOut
         ? "The request timed out before the result could be confirmed. Recheck the saved payment status; no new transfer will be created."
         : "The result could not be confirmed. Recheck the saved payment status; no new transfer will be created.";
+      localNeedsReview = true;
+      finalWallet = null;
       renderWalletResult({ status: "needs_review", error: message }, { localNeedsReview: true });
-      setPaymentFormState(null, true);
+      focusWalletResult();
       setWalletError(message);
     } finally {
       window.clearTimeout(timeoutId);
       form.dataset.walletRequestBusy = "false";
       setFormBusy(form, false);
+      setPaymentFormState(finalWallet, localNeedsReview);
     }
   };
 
@@ -270,6 +292,8 @@
   });
 
   if (walletForm) {
+    const initialStatus = walletForm.dataset.walletStatus || "created";
+    if (TERMINAL_STATUSES.has(initialStatus)) setPaymentFormState({ status: initialStatus });
     walletForm.addEventListener("submit", (event) => {
       event.preventDefault();
       requestWalletState(walletForm);
