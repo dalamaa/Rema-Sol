@@ -132,6 +132,35 @@ def test_each_customer_checkout_gets_unique_address_and_merchant_code(client, pr
     assert len(set(merchant_codes)) == 2
 
 
+def test_checkout_refresh_preserves_credentials_and_compact_payment_layout(client, product):
+    token = csrf(client)
+    checkout = client.post(
+        f"/p/{product['slug']}/checkout",
+        data={"csrf_token": token},
+        follow_redirects=True,
+    )
+    page = checkout.get_data(as_text=True)
+    address = re.search(r'<code class="payment-address-code">([^<]+)</code>', page).group(1)
+    merchant_code = re.search(r'<div class="claim-code" data-copy="([^"]+)">', page).group(1)
+    path = checkout.request.path
+    with client.session_transaction() as session:
+        order_id = session["checkout_access"]
+
+    refreshed = client.get(path)
+    refreshed_html = refreshed.get_data(as_text=True)
+    refreshed_address = re.search(r'<code class="payment-address-code">([^<]+)</code>', refreshed_html).group(1)
+    refreshed_merchant_code = re.search(r'<div class="claim-code" data-copy="([^"]+)">', refreshed_html).group(1)
+    assert refreshed.status_code == 200
+    assert refreshed_address == address
+    assert refreshed_merchant_code == merchant_code
+    assert f"solana:{address}?amount={product['price_sol']}" in refreshed_html
+    assert "Payment details" in refreshed_html
+    assert "Everything you need to pay" not in refreshed_html
+    assert "payment-instructions" not in refreshed_html
+    with client.session_transaction() as session:
+        assert session["checkout_access"] == order_id
+
+
 def test_test_wallet_is_separate_and_only_sends_to_active_checkouts(client, app, engine, product, fake_solana):
     token = csrf(client)
     demo_page = client.get("/demo")

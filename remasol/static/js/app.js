@@ -62,11 +62,26 @@
   };
 
   const setFormBusy = (form, busy, label = "Payment in progress") => {
+    const walletOperation = form?.matches?.("[data-wallet-payment], [data-wallet-recheck]");
     const button = form?.querySelector("button[type='submit']");
+    if (walletOperation && !busy) resultPanel?.removeAttribute("aria-busy");
     if (!button) return;
     if (!button.dataset.idleHtml) button.dataset.idleHtml = button.innerHTML;
     button.disabled = busy;
-    button.setAttribute("aria-busy", String(busy));
+    if (walletOperation) {
+      // The result card owns the single wallet progress indicator. Keeping a
+      // second button spinner here made terminal responses look stuck and left
+      // a stale busy state behind on dynamically-created recheck forms.
+      if (resultPanel) {
+        if (busy) resultPanel.setAttribute("aria-busy", "true");
+        else resultPanel.removeAttribute("aria-busy");
+      }
+      button.removeAttribute("aria-busy");
+    } else if (busy) {
+      button.setAttribute("aria-busy", "true");
+    } else {
+      button.removeAttribute("aria-busy");
+    }
     if (busy) button.textContent = label;
     else button.innerHTML = button.dataset.idleHtml;
     form.querySelectorAll("input, select, textarea").forEach((control) => {
@@ -149,6 +164,7 @@
     const csrfToken = resultPanel.dataset.csrfToken || walletForm?.elements.csrf_token?.value || "";
 
     resultPanel.dataset.walletStatus = status;
+    if (TERMINAL_STATUSES.has(status)) resultPanel.removeAttribute("aria-busy");
     resultPanel.replaceChildren(make("div", "panel-kicker", "Payment result"));
 
     if (status === "created" && !wallet?.payment_signature) {
@@ -314,4 +330,8 @@
     button.setAttribute("aria-busy", "true");
     button.textContent = form.dataset.loadingText;
   });
+
+  if (window.__REMA_SOL_TEST__) {
+    window.__REMA_SOL_TEST__.wallet = { requestWalletState, renderWalletResult, resultPanel, walletForm };
+  }
 })();

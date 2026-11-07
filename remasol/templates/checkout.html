@@ -23,36 +23,40 @@
           <h1>{{ order.product_name|replace("'", "’") }}</h1>
           <p>{{ order.product_description or 'A practical digital guide for creators who want a clearer way to make and share their work.' }}</p>
           <div class="checkout-summary-price"><span>{{ order.price_sol }}</span> SOL</div>
+          <div class="checkout-devnet-label">{{ icon('shield', 14) }} Solana Devnet</div>
         </div>
       </div>
 
-      {% if claim_code %}
-      <div class="claim-banner"><div class="claim-banner-icon">{{ icon('lock', 20) }}</div><div><strong>Save your private Merchant Code</strong><p>Keep this code with your order and payment transaction ID. It is private to this checkout.</p><div class="claim-code" data-copy="{{ claim_code }}"><span>{{ claim_code }}</span><button type="button" class="copy-button" aria-label="Copy private Merchant Code">{{ icon('copy', 15) }} Copy Code</button></div></div></div>
-      {% endif %}
-
-      <div class="payment-panel">
-        <div class="payment-panel-heading"><div><span class="payment-label">Your order</span><h2>Send {{ order.price_sol }} SOL</h2></div><span class="status-pill status-{{ order.status }}"><span></span>{{ order.status|status_label }}</span></div>
-        <div class="payment-amount"><span>{{ order.price_sol }}</span> <small>SOL</small></div>
-        <div class="address-box"><div><span class="address-label">Unique payment wallet</span><code class="payment-address-code">{{ order.payment_address }}</code></div><button type="button" class="copy-button" data-copy="{{ order.payment_address }}" aria-label="Copy unique payment wallet address">{{ icon('copy', 16) }} Copy Address</button></div>
-        <p class="payment-refund-note" role="note">For easier refunds, pay from a Solana wallet you control. Payments sent directly from exchanges may require manual review if you accidentally overpay.</p>
-        <div class="payment-actions"><a class="button button-quiet" href="solana:{{ order.payment_address }}?amount={{ order.price_sol }}">{{ icon('wallet', 16) }} Pay with Solana Pay</a><span class="payment-network">{{ icon('shield', 14) }} Solana Devnet · native SOL</span></div>
-        <div class="payment-instructions"><div><span class="instruction-number">1</span><span>Confirm the ebook title and exact price above.</span></div><div><span class="instruction-number">2</span><span>Send {{ order.price_sol }} SOL to this unique payment wallet on Devnet.</span></div><div><span class="instruction-number">3</span><span>Keep the transaction ID and Merchant Code until the order is complete.</span></div></div>
-      </div>
-      <div class="checkout-footnote">{{ icon('database', 15) }} The receiving address belongs only to this order. Payment records are checked from finalized Solana activity.</div>
+      <p class="payment-refund-note checkout-refund-note" role="note">For easier refunds, pay from a Solana wallet you control. Exchange withdrawals may need manual review if you overpay.</p>
     </main>
 
     <aside class="checkout-side">
-      <div class="side-card order-ready-card">
-        <div class="card-topline"><span class="panel-kicker">Order ready</span><span class="step-count">Devnet</span></div>
-        <h2>Everything you need to pay</h2>
-        <p class="card-lede">This is a private payment room for your ebook order. No account or wallet connection is required.</p>
-        <div class="checkout-check-list">
-          <div><span>{{ icon('check', 15) }}</span><strong>Unique receiving address</strong><small>Created for this order only.</small></div>
-          <div><span>{{ icon('check', 15) }}</span><strong>Private Merchant Code</strong><small>Save it before leaving this page.</small></div>
-          <div><span>{{ icon('check', 15) }}</span><strong>Clear price in SOL</strong><small>{{ order.price_sol }} SOL on Solana Devnet.</small></div>
+      <div class="panel checkout-payment-card">
+        <div class="checkout-payment-header">
+          <div><span class="payment-label">Payment details</span><h2>Send {{ order.price_sol }} SOL</h2></div>
+        </div>
+
+        <div class="address-box">
+          <div class="address-copy">
+            <span class="address-label">Unique payment wallet</span>
+            <code class="payment-address-code">{{ order.payment_address }}</code>
+          </div>
+          <button type="button" class="copy-button" data-copy="{{ order.payment_address }}" aria-label="Copy unique checkout address">{{ icon('copy', 16) }} Copy Address</button>
+        </div>
+
+        {% if claim_code %}
+        <div class="checkout-code-block">
+          <div class="checkout-code-heading"><span>Private Merchant Code</span></div>
+          <div class="claim-code" data-copy="{{ claim_code }}"><span>{{ claim_code }}</span><button type="button" class="copy-button" aria-label="Copy private Merchant Code">{{ icon('copy', 15) }} Copy Code</button></div>
+          <p class="checkout-save-note">Save this code with your transaction ID.</p>
+        </div>
+        {% endif %}
+
+        <div class="payment-actions">
+          <a class="button button-quiet" href="solana:{{ order.payment_address }}?amount={{ order.price_sol }}">{{ icon('wallet', 16) }} Pay with Solana Pay</a>
+          <span class="payment-network">{{ icon('shield', 14) }} Solana Devnet · native SOL</span>
         </div>
       </div>
-      <div class="side-note">{{ icon('info', 15) }} Send only test SOL on Devnet. Keep the transaction ID with your Merchant Code if you need to look up the order later.</div>
     </aside>
   </div>
 </section>

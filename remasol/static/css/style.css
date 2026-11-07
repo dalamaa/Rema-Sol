@@ -423,12 +423,12 @@ td strong { color: var(--text); font-size: 13px; font-weight: 500; }
 .detail-label { color: var(--gold); font: 500 10px var(--mono); letter-spacing: .05em; }
 .product-detail-strip strong { max-width: 250px; color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1.5; }
 
-.checkout-page { padding-block: 40px 88px; }
-.checkout-nav-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-bottom: 28px; border-bottom: 1px solid var(--line); }
+.checkout-page { padding-block: 28px 58px; }
+.checkout-nav-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
 .checkout-step { color: var(--dim); font: 10px var(--mono); letter-spacing: .05em; }
-.checkout-grid { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(350px, .72fr); gap: 18px; align-items: start; padding-top: 38px; }
-.checkout-product-summary { display: flex; align-items: center; gap: 25px; }
-.checkout-product-summary .ebook-cover-small { width: 116px; flex: 0 0 116px; padding: 13px 12px 11px; transform: rotate(-3deg); box-shadow: 10px 12px 0 rgba(169, 147, 255, .12), 14px 19px 28px rgba(0, 0, 0, .28); }
+.checkout-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(390px, .92fr); gap: 22px; align-items: start; padding-top: 26px; }
+.checkout-product-summary { display: grid; grid-template-columns: 150px minmax(0, 1fr); align-items: center; gap: 24px; padding: 20px; border: 1px solid var(--line); border-radius: 10px; background: rgba(18, 26, 39, .42); }
+.checkout-product-summary .ebook-cover-small { width: 150px; flex: 0 0 150px; padding: 13px 12px 11px; transform: rotate(-3deg); box-shadow: 10px 12px 0 rgba(169, 147, 255, .12), 14px 19px 28px rgba(0, 0, 0, .28); }
 .ebook-cover-small .cover-topline { font-size: 6px; }
 .ebook-cover-small .cover-rule { margin-top: 7px; }
 .ebook-cover-small .cover-kicker { margin-top: 23px; font-size: 6px; }
@@ -439,14 +439,25 @@ td strong { color: var(--text); font-size: 13px; font-weight: 500; }
 .ebook-cover-small .cover-orbit span, .ebook-cover-small .cover-orbit i { width: 4px; height: 4px; top: 4px; right: 5px; }
 .ebook-cover-small .cover-orbit i { top: auto; right: auto; bottom: 4px; left: 5px; }
 .ebook-cover-small .cover-bottomline { padding-top: 7px; font-size: 5px; }
-.checkout-product-summary h1 { margin: 8px 0 8px; font-size: clamp(34px, 4vw, 50px); line-height: 1.05; letter-spacing: -.055em; font-weight: 500; text-wrap: balance; }
+.checkout-product-summary h1 { margin: 8px 0 8px; font-size: clamp(30px, 3.2vw, 45px); line-height: 1.05; letter-spacing: -.055em; font-weight: 500; text-wrap: balance; }
 .checkout-product-summary p { max-width: 430px; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
-.checkout-summary-price { margin-top: 14px; color: var(--gold); font: 500 20px var(--mono); }
-.checkout-summary-price span { font-size: 26px; }
-.checkout-main .claim-banner { margin-top: 35px; }
-.payment-panel { margin-top: 30px; }
-.payment-panel-heading { display: flex; align-items: start; justify-content: space-between; gap: 20px; }
-.payment-panel h2 { margin: 7px 0 0; font-size: 22px; font-weight: 500; letter-spacing: -.03em; }
+.checkout-summary-price { margin-top: 14px; color: var(--gold); font: 500 17px var(--mono); }
+.checkout-summary-price span { font-size: 24px; }
+.checkout-devnet-label { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; color: var(--green); font: 10px var(--mono); }
+.checkout-devnet-label .icon { flex: 0 0 auto; }
+.checkout-refund-note { max-width: 540px; margin-top: 14px; }
+.checkout-payment-card { padding: 20px; background: linear-gradient(145deg, #152237, #111825); }
+.checkout-payment-header { margin-bottom: 17px; }
+.checkout-payment-card h2 { margin: 7px 0 0; font-size: 25px; font-weight: 500; letter-spacing: -.035em; }
+.checkout-payment-card .address-box { align-items: flex-start; }
+.checkout-payment-card .address-copy { min-width: 0; }
+.checkout-payment-card .address-box code { overflow-wrap: anywhere; white-space: normal; line-height: 1.45; }
+.checkout-payment-card .copy-button { min-height: 42px; }
+.checkout-code-block { margin-top: 12px; padding: 13px; border: 1px solid rgba(169, 147, 255, .32); border-radius: 8px; background: rgba(169, 147, 255, .06); }
+.checkout-code-heading { margin-bottom: 9px; color: var(--muted); font: 10px var(--mono); }
+.checkout-code-block .claim-code { padding: 7px 7px 7px 10px; }
+.checkout-code-block .claim-code > span { min-width: 0; overflow-wrap: anywhere; white-space: normal; line-height: 1.4; }
+.checkout-save-note { margin: 8px 0 0; color: var(--dim); font: 10px/1.45 var(--mono); }
 .payment-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 13px; margin-top: 18px; }
 .payment-network { display: inline-flex; align-items: center; gap: 6px; color: var(--dim); font: 10px var(--mono); }
 .payment-network .icon { color: var(--green); }
@@ -456,25 +467,12 @@ td strong { color: var(--text); font-size: 13px; font-weight: 500; }
 .payment-gate strong { margin-bottom: 2px; font-weight: 600; }
 .payment-gate p { margin: 0; color: var(--muted); line-height: 1.5; }
 .payment-address-code { max-width: 100%; overflow-wrap: anywhere; white-space: normal !important; }
-.checkout-footnote { display: flex; align-items: center; gap: 8px; margin-top: 18px; color: var(--dim); font: 10px/1.5 var(--mono); }
-.checkout-footnote .icon { flex: 0 0 auto; color: var(--violet); }
-.checkout-side { display: grid; align-content: start; gap: 14px; padding-top: 32px; }
-.checkout-side .side-card { box-shadow: none; }
-.checkout-side .side-card h2 { margin-top: 16px; }
-.checkout-side .stack-form { padding: 22px 0 0; }
-.checkout-side .inline-error { margin-top: 18px; }
+.checkout-side { display: block; padding-top: 0; }
 .save-confirmation { display: flex; align-items: center; gap: 7px; margin-top: 17px; color: var(--green); font: 11px var(--mono); }
 .verify-card { background: #0f1724; }
 .verify-blocked { display: flex; align-items: center; gap: 9px; margin-top: 22px; padding: 13px; color: var(--dim); border: 1px dashed var(--line-strong); border-radius: 7px; font: 11px/1.45 var(--mono); }
 .verify-blocked .icon { flex: 0 0 auto; color: var(--violet); }
 .checkout-grid-simple .checkout-side { padding-top: 0; }
-.order-ready-card { background: linear-gradient(145deg, #132033, #101722); }
-.order-ready-card h2 { max-width: 290px; margin-top: 16px; }
-.checkout-check-list { display: grid; gap: 17px; margin-top: 25px; padding-top: 23px; border-top: 1px solid var(--line); }
-.checkout-check-list > div { display: grid; grid-template-columns: 24px 1fr; column-gap: 10px; align-items: start; }
-.checkout-check-list > div > span { width: 22px; height: 22px; grid-row: span 2; display: grid; place-items: center; color: var(--green); border: 1px solid rgba(85, 213, 155, .38); border-radius: 50%; }
-.checkout-check-list strong { color: var(--text); font-size: 13px; font-weight: 500; }
-.checkout-check-list small { margin-top: 3px; color: var(--dim); font: 10px/1.45 var(--mono); }
 
 /* Public demo wallet and merchant treasury */
 .demo-hero { padding-block: 76px 42px; display: flex; align-items: end; justify-content: space-between; gap: 35px; }
@@ -749,24 +747,26 @@ td strong { color: var(--text); font-size: 13px; font-weight: 500; }
   .product-purchase-row { align-items: flex-start; flex-direction: column; gap: 9px; }
   .product-detail-strip { grid-template-columns: 1fr; gap: 18px; padding-block: 21px; }
   .product-detail-strip strong { max-width: 100%; }
-  .checkout-page { padding-block: 27px 60px; }
+  .checkout-page { padding-block: 20px 38px; }
   .checkout-nav-row { align-items: start; flex-direction: column; gap: 12px; }
-  .checkout-grid { padding-top: 27px; }
-  .checkout-product-summary { align-items: start; gap: 16px; }
-  .checkout-product-summary .ebook-cover-small { width: 84px; flex-basis: 84px; padding: 10px 8px 8px; }
+  .checkout-grid { gap: 14px; padding-top: 18px; }
+  .checkout-product-summary { grid-template-columns: 96px minmax(0, 1fr); align-items: start; gap: 14px; padding: 14px; }
+  .checkout-product-summary .ebook-cover-small { width: 96px; flex-basis: 96px; padding: 10px 8px 8px; }
   .ebook-cover-small .cover-kicker { margin-top: 16px; }
   .ebook-cover-small .cover-title { font-size: 10px; }
-  .checkout-product-summary h1 { margin-top: 5px; font-size: 31px; }
+  .checkout-product-summary h1 { margin-top: 5px; font-size: 27px; }
   .checkout-product-summary p { font-size: 12px; }
   .checkout-summary-price { margin-top: 9px; font-size: 17px; }
   .checkout-summary-price span { font-size: 22px; }
-  .payment-panel-heading { align-items: start; flex-direction: column; gap: 12px; }
-  .payment-panel h2 { font-size: 20px; }
-  .payment-amount { font-size: 48px; }
-  .payment-actions { align-items: stretch; flex-direction: column; }
-  .payment-actions .button { width: 100%; }
-  .checkout-main .claim-banner { margin-top: 28px; }
-  .checkout-side { gap: 12px; }
+  .checkout-payment-card { padding: 15px; }
+  .checkout-payment-card h2 { font-size: 22px; }
+  .checkout-payment-card .address-box { align-items: stretch; flex-direction: column; gap: 10px; }
+  .checkout-payment-card .address-box .copy-button { width: 100%; }
+  .checkout-code-block .claim-code { align-items: stretch; flex-direction: column; gap: 8px; }
+  .checkout-code-block .claim-code .copy-button { width: 100%; margin-left: 0; }
+  .checkout-payment-card .payment-actions { align-items: stretch; flex-direction: column; gap: 10px; }
+  .checkout-payment-card .payment-actions .button { width: 100%; }
+  .checkout-payment-card .payment-network { justify-content: center; }
 }
 
 @media (max-width: 920px) {
