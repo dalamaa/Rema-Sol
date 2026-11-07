@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="dashboard-head treasury-head section-wrap">
+  <div>
+    <div class="eyebrow"><span class="eyebrow-line"></span> Merchant console / Demo treasury</div>
+    <h1>Fund the public demo safely.</h1>
+    <p>This dedicated Devnet wallet funds temporary buyer wallets for the public demo. It never moves SOL from an existing customer wallet.</p>
+  </div>
+  <div class="dashboard-status">
+    {% if treasury.configured %}<span class="live-indicator {{ 'treasury-live' if treasury.enabled else 'treasury-paused' }}"><span></span>{{ 'Demo enabled' if treasury.enabled else 'Demo paused' }}</span>{% endif %}
+    <a class="text-link" href="{{ url_for('main.merchant_dashboard') }}">{{ icon('arrow-right', 15) }} Back to console</a>
+  </div>
+</section>
+
+{% if error %}<div class="section-wrap treasury-error"><div class="inline-error" role="alert">{{ icon('alert', 15) }} {{ error }}</div></div>{% endif %}
+
+{% if not treasury.configured %}
+<section class="section-wrap treasury-unconfigured panel">
+  <div class="empty-state-icon">{{ icon('lock', 20) }}</div>
+  <h2>Treasury is not configured</h2>
+  <p>Set <code>REMA_SOL_WALLET_KEY</code> and restart the app. RemaSol will generate a dedicated Devnet treasury wallet; it will not fund itself automatically.</p>
+</section>
+{% else %}
+<section class="metrics-grid section-wrap treasury-metrics">
+  <div class="metric metric-highlight"><span class="metric-label">Treasury balance</span><strong>{{ treasury.balance_sol }}</strong><span class="metric-note">SOL · Devnet</span></div>
+  <div class="metric"><span class="metric-label">Active demos</span><strong>{{ treasury.active_sessions }}</strong><span class="metric-note">of {{ treasury.max_concurrent_demos }} concurrent</span></div>
+  <div class="metric"><span class="metric-label">Demo sessions</span><strong>{{ treasury.total_sessions }}</strong><span class="metric-note">{{ treasury.total_transferred_sol }} SOL sent</span></div>
+  <div class="metric"><span class="metric-label">Budget remaining</span><strong>{{ treasury.remaining_daily_budget_sol }}</strong><span class="metric-note">SOL today</span></div>
+  <div class="metric"><span class="metric-label">Allocated today</span><strong>{{ treasury.credit_accounting.successful_allocations_lamports }}</strong><span class="metric-note">SOL committed or locked</span></div>
+  <div class="metric"><span class="metric-label">Still unrecovered</span><strong>{{ treasury.credit_accounting.unrecovered_funds_lamports }}</strong><span class="metric-note">SOL held by failed senders</span></div>
+</section>
+
+<section class="treasury-grid section-wrap">
+  <div class="panel treasury-address-card">
+    <div class="panel-heading"><div><span class="panel-kicker">Dedicated wallet</span><h2>Public treasury address</h2></div><span class="panel-icon">{{ icon('wallet', 18) }}</span></div>
+    <div class="treasury-address-body">
+      <p>Fund this address with a small amount of Devnet SOL from the faucet or another wallet. The private key is encrypted at rest and is never shown in the console.</p>
+      <div class="address-box treasury-address-box"><code>{{ treasury.public_address }}</code><button type="button" class="copy-button" data-copy="{{ treasury.public_address }}" aria-label="Copy treasury address">{{ icon('copy', 15) }} Copy</button></div>
+      <a class="text-link" href="https://explorer.solana.com/address/{{ treasury.public_address }}?cluster=devnet" target="_blank" rel="noreferrer">Open address in Explorer {{ icon('external', 14) }}</a>
+      <div class="treasury-boundary">{{ icon('shield', 15) }} The demo can only send to generated buyer and checkout addresses. There is no arbitrary withdrawal form.</div>
+    </div>
+  </div>
+
+  <div class="panel treasury-settings-card">
+    <div class="panel-heading"><div><span class="panel-kicker">Guardrails</span><h2>Public demo limits</h2></div><span class="step-count">Admin only</span></div>
+    <form method="post" action="{{ url_for('main.update_merchant_treasury') }}" class="stack-form" data-loading-text="Saving limits…">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label class="toggle-label"><span><strong>Allow new demo payments</strong><small>Pause new funding attempts without deleting sessions.</small></span><input type="checkbox" name="enabled" {% if treasury.enabled %}checked{% endif %}><i aria-hidden="true"></i></label>
+      <label>Maximum payment<div class="input-with-suffix"><input name="max_payment" value="{{ treasury.max_payment_sol }}" inputmode="decimal" required><span>SOL</span></div><span class="field-hint">Hard cap per demo payment, between 0.0005 and 0.02 SOL.</span></label>
+      <label>Daily allocation<div class="input-with-suffix"><input name="daily_budget" value="{{ treasury.daily_budget_sol }}" inputmode="decimal" required><span>SOL</span></div><span class="field-hint">Includes the small funding fee buffer for each session.</span></label>
+      <label>Maximum concurrent demos<input name="max_concurrent" value="{{ treasury.max_concurrent_demos }}" inputmode="numeric" required><span class="field-hint">Atomic reservations prevent the public flow from exceeding this count.</span></label>
+      <button class="button button-primary button-full" type="submit">Save demo limits {{ icon('arrow-right', 16) }}</button>
+    </form>
+  </div>
+</section>
+
+<section class="panel orders-panel treasury-recent section-wrap">
+  <div class="panel-heading"><div><span class="panel-kicker">Operational view</span><h2>Recent demo sessions</h2></div><span class="mono-label">{{ treasury.total_refunds_sol }} SOL refunded · {{ treasury.unused_funding_sol }} SOL buffers tracked</span></div>
+  {% if treasury.recent %}
+  <div class="table-wrap"><table><thead><tr><th>Status</th><th>Buyer wallet</th><th>Funding</th><th>Payment</th><th>Updated</th></tr></thead><tbody>
+    {% for demo in treasury.recent %}
+    <tr>
+      <td><span class="status-pill status-{{ demo.status }}"><span></span>{{ demo.status|status_label }}</span></td>
+      <td class="mono">{{ demo.buyer_address|short }}</td>
+      <td class="mono">{{ demo.funding_sol }} SOL{% if demo.funding_signature %}<a class="cell-link" href="https://explorer.solana.com/tx/{{ demo.funding_signature }}?cluster=devnet" target="_blank" rel="noreferrer">{{ demo.funding_signature|short }} {{ icon('external', 12) }}</a>{% endif %}</td>
+      <td class="mono">{% if demo.selected_lamports %}{{ demo.selected_sol }} SOL{% else %}—{% endif %}{% if demo.payment_signature %}<a class="cell-link" href="https://explorer.solana.com/tx/{{ demo.payment_signature }}?cluster=devnet" target="_blank" rel="noreferrer">{{ demo.payment_signature|short }} {{ icon('external', 12) }}</a>{% endif %}</td>
+      <td class="cell-sub">{{ demo.updated_at[:16].replace('T', ' ') }} UTC</td>
+    </tr>
+    {% endfor %}
+  </tbody></table></div>
+  {% else %}
+  <div class="table-empty"><span>{{ icon('database', 20) }}</span><p>Public demo sessions will appear here after a visitor opens a temporary wallet.</p></div>
+  {% endif %}
+</section>
+
+<section class="warning-band section-wrap treasury-warning"><div class="warning-icon">{{ icon('info', 18) }}</div><div><strong>Funding is manual by design.</strong><p>Use the displayed public address to add Devnet SOL. RemaSol does not automatically fund this treasury, touch existing customer wallets, or expose arbitrary withdrawal controls.</p></div></section>
+{% endif %}
+{% endblock %}

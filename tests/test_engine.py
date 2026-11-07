@@ -158,3 +158,32 @@ def test_insufficient_balance_is_review_only(engine, product, fake_solana):
 def test_invalid_refund_destination_is_rejected(engine, product, fake_solana):
     with pytest.raises(DomainError):
         engine.create_order(product["slug"], "", "127.0.0.1")
+
+
+def test_ordinary_checkout_derives_sender_and_routes_unproven_refund_to_review(engine, product, fake_solana):
+    order, code = engine.create_order_draft(product["slug"], "127.0.0.1")
+    add_payment(fake_solana, "ordinary-overpayment", order, 500_000_000)
+
+    verified, verification = engine.verify_payment(order["id"], code, "ordinary-overpayment")
+    assert verification.state == "overpayment"
+    assert verified["refund_destination"] == "exchange-hot-wallet"
+    assert verified["refund_destination_mode"] == "derived_sender"
+    assert verified["sender_ownership_verified"] == 0
+
+    checked, eligibility = engine.check_refund_eligibility_by_code(
+        code, "exchange-hot-wallet", "ordinary-overpayment"
+    )
+    assert eligibility == "needs_review"
+    reviewed, state = engine.request_refund_by_code(
+        code, "exchange-hot-wallet", "ordinary-overpayment"
+    )
+    assert state == "needs_review"
+    assert reviewed["refund_status"] == "needs_review"
+    assert reviewed["refund_destination"] == "exchange-hot-wallet"
+    assert fake_solana.broadcast_calls == 0
+
+
+def test_claimant_cannot_replace_derived_refund_destination(engine, product, fake_solana):
+    order, code = engine.create_order_draft(product["slug"], "127.0.0.1")
+    with pytest.raises(DomainError, match="derived from the verified payment sender"):
+        engine.set_refund_destination(order["id"], code, "arbitrary-refund-wallet")

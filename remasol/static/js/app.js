@@ -27,6 +27,16 @@
     });
   });
 
+  document.querySelectorAll(".preset-button[data-target]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const input = document.getElementById(button.dataset.target);
+      if (!input) return;
+      input.value = button.dataset.amount;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.focus();
+    });
+  });
+
   document.querySelectorAll("form[data-loading-text]").forEach((form) => {
     form.addEventListener("submit", () => {
       const button = form.querySelector("button[type='submit']");

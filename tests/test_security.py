@@ -83,9 +83,9 @@ def test_unpaid_checkout_cap_stops_checkout_spam(app, client, product):
     token = csrf(client)
     payload = {"csrf_token": token, "refund_destination": "refund-wallet"}
 
-    first = client.post(f"/p/{product['slug']}/checkout", data=payload)
-    second = client.post(f"/p/{product['slug']}/checkout", data=payload)
-    third = client.post(f"/p/{product['slug']}/checkout", data=payload)
+    first = client.post(f"/p/{product['slug']}/checkout", data=payload, follow_redirects=True)
+    second = client.post(f"/p/{product['slug']}/checkout", data=payload, follow_redirects=True)
+    third = client.post(f"/p/{product['slug']}/checkout", data=payload, follow_redirects=True)
 
     assert first.status_code == 200
     assert second.status_code == 200

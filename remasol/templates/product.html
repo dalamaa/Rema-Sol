@@ -1,26 +1,48 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="checkout-shell section-wrap product-shell">
-  <div class="checkout-intro">
-    <a class="back-link" href="{{ url_for('main.home') }}">{{ icon('arrow-right', 15) }} RemaSol checkout</a>
-    <div class="product-eyebrow">Digital product · Solana Devnet</div>
-    <h1>{{ product.name }}</h1>
-    <p class="product-description">{{ product.description or 'A digital product delivered after your payment is verified.' }}</p>
-    <div class="price-lockup"><span>{{ product.price_sol }}</span><small>SOL</small></div>
-    <div class="proof-note">{{ icon('shield', 16) }} Exact price checked in lamports</div>
+<section class="product-page section-wrap">
+  <div class="product-art-column">
+    <div class="product-art-backdrop"></div>
+    <figure class="ebook-cover" role="img" aria-label="Book cover for The Digital Creator’s Guide">
+      <div class="cover-topline"><span>REMA / FIELD NOTES</span><span>01</span></div>
+      <div class="cover-rule"></div>
+      <div class="cover-kicker">A practical guide to</div>
+      <div class="cover-title">The Digital<br>Creator’s<br>Guide</div>
+      <div class="cover-orbit"><span></span><i></i></div>
+      <div class="cover-bottomline">MAKE THE WORK. SHARE THE WORK.</div>
+    </figure>
+    <div class="product-art-caption"><span class="product-art-dot"></span> Digital edition · readable anywhere</div>
   </div>
-  <div class="checkout-card">
-    <div class="card-topline"><span class="mono-label">Create payment room</span><span class="step-count">1 / 1</span></div>
-    <h2>Where should an excess payment return?</h2>
-    <p class="card-lede">Register a Solana address before paying. This destination is locked to this checkout and cannot be changed later.</p>
+
+  <div class="product-copy">
+    <a class="back-link" href="{{ url_for('main.home') }}">{{ icon('arrow-right', 15) }} RemaSol storefront</a>
+    <div class="product-eyebrow">Digital ebook · Solana Devnet</div>
+    <h1>{{ product.name|replace("'", "’") }}</h1>
+    <p class="product-description">{{ product.description or 'A clear, practical field guide for turning your creative work into a durable digital practice.' }}</p>
+
+    <div class="product-purchase-row">
+      <div class="price-lockup"><span>{{ product.price_sol }}</span><small>SOL</small></div>
+      <span class="product-format">PDF / digital edition</span>
+    </div>
+
+    <ul class="benefit-list" aria-label="What you’ll get">
+      <li><span class="benefit-check">{{ icon('check', 15) }}</span><span>Build a focused creative practice around the work that matters to you.</span></li>
+      <li><span class="benefit-check">{{ icon('check', 15) }}</span><span>Turn ideas into repeatable content, offers, and momentum.</span></li>
+      <li><span class="benefit-check">{{ icon('check', 15) }}</span><span>Use simple prompts to make your next launch feel more intentional.</span></li>
+    </ul>
+
     {% if error %}<div class="inline-error" role="alert">{{ icon('alert', 15) }} {{ error }}</div>{% endif %}
-    <form method="post" action="{{ url_for('main.create_checkout', slug=product.slug) }}" class="stack-form" data-loading-text="Creating secure checkout…">
+    <form method="post" action="{{ url_for('main.create_checkout', slug=product.slug) }}" class="product-cta-form" data-loading-text="Opening checkout…">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <label>Refund destination<input name="refund_destination" value="{{ request.form.get('refund_destination', '') }}" placeholder="Your Solana wallet address" autocomplete="off" spellcheck="false" required><span class="field-hint">Use a wallet you control. Exchange deposit addresses may need special handling.</span></label>
-      <button class="button button-primary button-full" type="submit">Create secure checkout {{ icon('arrow-right', 16) }}</button>
+      <button class="button button-primary product-cta" type="submit">Buy with SOL {{ icon('arrow-right', 17) }}</button>
     </form>
-    <div class="security-line"><span>{{ icon('lock', 14) }}</span> Your claim code is generated once and never stored in plain text.</div>
+    <p class="product-note">A private checkout room is created next with the exact payment address and your private claim code.</p>
   </div>
 </section>
-<section class="checkout-trust section-wrap"><div>{{ icon('wallet', 17) }} A unique payment address per order</div><div>{{ icon('lock', 17) }} Refund destination locked before payment</div><div>{{ icon('database', 17) }} On-chain verification, not screenshots</div></section>
+
+<section class="product-detail-strip section-wrap" aria-label="Product details">
+  <div><span class="detail-label">Inside the guide</span><strong>Practical notes for making, sharing, and sustaining digital work.</strong></div>
+  <div><span class="detail-label">Payment</span><strong>Exact price verified on Solana Devnet.</strong></div>
+  <div><span class="detail-label">Your path</span><strong>Product → checkout → recovery, only if needed.</strong></div>
+</section>
 {% endblock %}

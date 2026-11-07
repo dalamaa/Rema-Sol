@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="demo-hero section-wrap">
+  <div>
+    <div class="eyebrow"><span class="eyebrow-line"></span> Public Devnet demo</div>
+    <h1>Try a real RemaSol payment in a temporary wallet.</h1>
+    <p>RemaSol funds a short-lived buyer wallet from its demo treasury, sends the selected amount to a unique checkout wallet, and verifies the real Devnet transaction.</p>
+  </div>
+  <div class="demo-network-card"><span class="network-dot"></span><div><strong>Solana Devnet</strong><span>Real transactions · capped test funds</span></div></div>
+</section>
+
+<section class="demo-layout section-wrap">
+  {% if error %}<div class="demo-error inline-error" role="alert">{{ icon('alert', 15) }} {{ error }}</div>{% endif %}
+  {% if not demo %}
+    <div class="demo-start panel">
+      <div class="demo-start-mark">{{ icon('wallet', 24) }}</div>
+      <span class="panel-kicker">One temporary wallet</span>
+      <h2>Open the public demo wallet</h2>
+      <p>RemaSol creates one buyer wallet and one unique checkout for this browser. No Phantom, exchange account, or personal Devnet SOL is needed.</p>
+      {% if not treasury_configured %}<div class="demo-warning">{{ icon('info', 15) }} The merchant has not configured the demo treasury yet.</div>{% elif not treasury_enabled %}<div class="demo-warning">{{ icon('info', 15) }} The public demo is paused right now.</div>{% endif %}
+      <form method="post" action="{{ url_for('main.create_demo_wallet') }}" data-loading-text="Creating demo wallet…">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="button button-primary" type="submit" {% if not treasury_configured or not treasury_enabled %}disabled{% endif %}>Create demo wallet {{ icon('arrow-right', 16) }}</button>
+      </form>
+      <p class="demo-start-note">The treasury only funds this demo flow. It never moves SOL from a customer wallet.</p>
+    </div>
+  {% else %}
+    {% set order = demo.order %}
+    <div class="demo-wallet-column">
+      <div class="panel wallet-card">
+        <div class="panel-heading"><div><span class="panel-kicker">Temporary buyer wallet</span><h2>Demo wallet</h2></div><span class="status-pill status-{{ demo.status }}"><span></span>{{ demo.status|status_label }}</span></div>
+        <div class="wallet-balance"><span>Test wallet balance</span><strong>{{ demo.buyer_balance_sol }} <small>SOL</small></strong></div>
+        <div class="copy-field"><div><span>Sender wallet address</span><code>{{ demo.buyer_address }}</code></div><button type="button" class="copy-button" data-copy="{{ demo.buyer_address }}" aria-label="Copy sender wallet address">{{ icon('copy', 15) }} Copy</button></div>
+        <div class="demo-private-note">{{ icon('lock', 14) }} This wallet is temporary and controlled by the demo service for this session.</div>
+      </div>
+
+      <div class="panel demo-payment-card">
+        <div class="panel-heading"><div><span class="panel-kicker">Send test SOL</span><h2>Pay the ebook checkout</h2></div><span class="demo-limit">{{ min_payment_sol }}–{{ max_payment_sol }} SOL</span></div>
+        <div class="demo-order-summary"><div><span>Ebook price</span><strong>{{ order.price_sol }} SOL</strong></div><div><span>Receiving wallet</span><code>{{ order.payment_address }}</code><button type="button" class="copy-button" data-copy="{{ order.payment_address }}" aria-label="Copy merchant receiving address">{{ icon('copy', 14) }} Copy</button></div></div>
+        <form method="post" action="{{ url_for('main.send_demo_payment') }}" class="demo-send-form" data-loading-text="Funding and sending…">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <label for="demo-amount">Amount to send<input id="demo-amount" name="amount" value="{{ demo.selected_sol if demo.selected_lamports else '0.002' }}" inputmode="decimal" min="{{ min_payment_sol }}" max="{{ max_payment_sol }}" step="0.000001" required><span class="field-hint">Choose a case to test; the server validates the exact lamports value.</span></label>
+          <div class="preset-row" aria-label="Preset payment amounts"><button type="button" class="preset-button" data-amount="0.0005">Underpayment <span>0.0005</span></button><button type="button" class="preset-button" data-amount="0.002">Exact <span>0.002</span></button><button type="button" class="preset-button" data-amount="0.005">Overpayment <span>0.005</span></button></div>
+          {% if demo.status in ['created', 'funding', 'funding_pending', 'funded', 'payment_pending'] %}
+            <button class="button button-primary button-full" type="submit">{{ 'Check transaction status' if demo.funding_signature or demo.payment_signature else 'Send Test SOL' }} {{ icon('arrow-right', 16) }}</button>
+          {% endif %}
+        </form>
+        {% if demo.last_error %}<div class="demo-warning" role="alert">{{ icon('alert', 15) }} {{ demo.last_error }}</div>{% endif %}
+      </div>
+    </div>
+
+    <aside class="demo-result-column">
+      {% if merchant_code %}
+      <div class="panel merchant-code-card">
+        <div class="panel-kicker">Private checkout credential</div><h2>Merchant Code</h2><p>Save this code with the sender wallet and payment transaction ID. Recovery checks all three together.</p>
+        <div class="secret-code" data-copy="{{ merchant_code }}"><code>{{ merchant_code }}</code><button type="button" class="copy-button" aria-label="Copy Merchant Code">{{ icon('copy', 15) }} Copy</button></div>
+      </div>
+      {% endif %}
+      <div class="panel demo-result-card" aria-live="polite">
+        <div class="panel-kicker">Transaction result</div>
+        {% if demo.payment_signature %}
+          <div class="demo-result-icon {{ 'success' if demo.status in ['paid_exact', 'underpaid', 'overpaid'] else 'pending' }}">{{ icon('check' if demo.status in ['paid_exact', 'underpaid', 'overpaid'] else 'clock', 21) }}</div>
+          <h2>{% if demo.status == 'overpaid' %}Overpayment verified{% elif demo.status == 'paid_exact' %}Exact payment verified{% elif demo.status == 'underpaid' %}Underpayment verified{% elif demo.status == 'payment_pending' %}Payment is finalizing{% else %}Demo payment needs review{% endif %}</h2>
+          <p>{% if demo.status == 'overpaid' %}The payment is eligible for excess recovery. {% elif demo.status == 'paid_exact' %}The amount matches the ebook price; no refund is due. {% elif demo.status == 'underpaid' %}The payment is below the ebook price; no refund is due. {% else %}RemaSol saved the transaction details and will not create a duplicate transfer.{% endif %}</p>
+          <div class="transaction-id"><span>Payment transaction ID</span><code>{{ demo.payment_signature }}</code><div><button type="button" class="copy-button" data-copy="{{ demo.payment_signature }}" aria-label="Copy payment transaction ID">{{ icon('copy', 14) }} Copy ID</button><a class="button button-quiet button-small" href="https://explorer.solana.com/tx/{{ demo.payment_signature }}?cluster=devnet" target="_blank" rel="noreferrer">Explorer {{ icon('external', 14) }}</a></div></div>
+          {% if demo.status == 'overpaid' %}<a class="button button-primary button-full" href="{{ url_for('main.recover') }}">Recover eligible excess {{ icon('arrow-right', 16) }}</a>{% else %}<a class="text-link" href="{{ url_for('main.recover') }}">Open payment recovery {{ icon('arrow-right', 16) }}</a>{% endif %}
+        {% else %}
+          <div class="demo-result-placeholder"><div class="placeholder-orbit">{{ icon('wallet', 23) }}</div><h2>Your transaction will appear here.</h2><p>Choose underpayment, exact payment, or overpayment, then send test SOL from the temporary wallet.</p></div>
+        {% endif %}
+      </div>
+      <div class="demo-safety-note">{{ icon('shield', 15) }} The demo uses a small, configurable treasury budget and never accepts an arbitrary recipient address.</div>
+    </aside>
+  {% endif %}
+</section>
+
+<section class="demo-how section-wrap"><div><span class="detail-label">What is real</span><strong>Each demo uses a unique receiving wallet and a real finalized Devnet transaction.</strong></div><div><span class="detail-label">What is temporary</span><strong>The buyer wallet is app-controlled for this browser and is funded only within the merchant budget.</strong></div><div><span class="detail-label">Need recovery?</span><strong>Use the Merchant Code, sender wallet, and payment transaction ID at the separate recovery page.</strong></div></section>
+{% endblock %}

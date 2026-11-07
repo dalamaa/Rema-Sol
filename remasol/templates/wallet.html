@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="wallet-hero section-wrap">
+  <div>
+    <div class="eyebrow"><span class="eyebrow-line"></span> Test Wallet</div>
+    <h1>Test Wallet</h1>
+    <p>{% if wallet %}Each test gets a fresh temporary sender wallet. The maximum applies to this payment only, and saved transfer records remain protected.{% else %}RemaSol provides free Devnet SOL for test payments. Start a fresh temporary sender for a capped checkout test.{% endif %}</p>
+  </div>
+  {% if wallet %}<div class="demo-network-card"><span class="network-dot"></span><div><strong>Solana Devnet</strong><span>Real transactions · capped test funds</span></div></div>{% endif %}
+</section>
+
+<section class="wallet-layout section-wrap">
+  {% if error %}<div class="wallet-error inline-error" role="alert">{{ icon('alert', 15) }} {{ error }}</div>{% endif %}
+  {% if not wallet %}
+    <div class="wallet-start panel">
+      <div class="wallet-credit wallet-credit-entry"><span>Maximum Test Payment</span><strong>{{ max_payment_sol }} <small>SOL</small></strong><p>Free Devnet SOL is available for testing. This maximum resets for every payment.</p></div>
+      {% if not treasury_configured %}<div class="demo-warning">{{ icon('info', 15) }} The test treasury is not configured yet.</div>{% elif not treasury_enabled %}<div class="demo-warning">{{ icon('info', 15) }} The Test Wallet is paused right now.</div>{% endif %}
+      <div class="wallet-start-actions"><form method="post" action="{{ url_for('main.create_test_wallet') }}" data-loading-text="Creating New Test…">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="button button-primary" type="submit" {% if not treasury_configured or not treasury_enabled %}disabled{% endif %}>New Test {{ icon('arrow-right', 16) }}</button>
+      </form></div>
+    </div>
+  {% else %}
+    <div class="wallet-sender-column">
+      <div class="panel wallet-card">
+        <div class="panel-heading"><div><span class="panel-kicker">Temporary sender wallet</span><h2>Test Wallet</h2></div><div class="wallet-card-actions"><span class="status-pill status-{{ wallet.status }}"><span></span>{{ wallet.status|status_label }}</span><form method="post" action="{{ url_for('main.create_test_wallet') }}" data-loading-text="Creating New Test…"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="button button-quiet button-small" type="submit">New Test</button></form></div></div>
+        <div class="wallet-credit"><span>Maximum Test Payment</span><strong>{{ max_payment_sol }} <small>SOL</small></strong><p>RemaSol provides free Devnet SOL for test payments. This is the maximum per payment, not a lifetime credit balance.</p></div>
+        <div class="wallet-balance"><span>Actual temporary wallet balance</span><strong>{% if wallet.actual_balance_available %}{{ wallet.available_balance_sol }} <small>SOL</small>{% else %}Unavailable{% endif %}</strong><p>This is the on-chain balance of this temporary wallet, separate from the per-payment limit.</p></div>
+        <div class="copy-field"><div><span>Sender wallet address</span><code>{{ wallet.sender_address }}</code></div><button type="button" class="copy-button" data-copy="{{ wallet.sender_address }}" aria-label="Copy sender wallet address">{{ icon('copy', 15) }} Copy</button></div>
+        <div class="demo-private-note">{{ icon('lock', 14) }} This wallet is temporary and controlled by the Test Wallet service for this session.</div>
+      </div>
+
+      <div class="panel wallet-send-card">
+        <div class="panel-heading"><div><span class="panel-kicker">Payment tool</span><h2>Send Test SOL</h2></div><span class="demo-limit">max {{ max_payment_sol }} SOL</span></div>
+        <form method="post" action="{{ url_for('main.send_test_wallet_payment') }}" class="wallet-send-form" data-loading-text="Funding and sending…">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="session_id" value="{{ wallet.id }}">
+          <label for="wallet-recipient">RemaSol checkout address<input id="wallet-recipient" name="recipient_address" value="{{ wallet.recipient_address or '' }}" placeholder="Paste the unique payment address from checkout" autocomplete="off" spellcheck="false" required><span class="field-hint">This field is blank for every New Test. External wallets are rejected; the server checks that this is an active RemaSol checkout.</span></label>
+          <label for="wallet-amount">Amount to send<input id="wallet-amount" name="amount" value="{{ wallet.selected_sol if wallet.selected_lamports else '0.002' }}" inputmode="decimal" min="{{ min_payment_sol }}" max="{{ max_payment_sol }}" step="0.000001" required><span class="field-hint">Choose a preset or enter a custom amount up to {{ max_payment_sol }} SOL.</span></label>
+          <div class="wallet-preset-row" aria-label="Test payment amount presets">
+            <button type="button" class="preset-button" data-target="wallet-amount" data-amount="0.001">0.001 <span>SOL</span></button>
+            <button type="button" class="preset-button" data-target="wallet-amount" data-amount="0.002">0.002 <span>SOL</span></button>
+            <button type="button" class="preset-button" data-target="wallet-amount" data-amount="0.005">0.005 <span>SOL</span></button>
+            <button type="button" class="preset-button" data-target="wallet-amount" data-amount="0.02">0.02 <span>SOL</span></button>
+          </div>
+          {% if wallet.status in ['created', 'funding', 'funding_pending', 'funded', 'payment_pending'] %}<button class="button button-primary button-full" type="submit">{{ 'Check payment status' if wallet.funding_signature or wallet.payment_signature else 'Send Test SOL' }} {{ icon('arrow-right', 16) }}</button>{% endif %}
+        </form>
+        {% if wallet.status == 'needs_review' %}<div class="demo-warning wallet-warning" role="alert">{{ icon('alert', 15) }} Payment needs review. No duplicate payment will be created. Recheck the saved payment status below.</div>{% elif wallet.status == 'failed' %}<div class="demo-warning wallet-warning" role="alert">{{ icon('alert', 15) }} This test payment failed. No second transfer was created. Start a New Test to try again.</div>{% endif %}
+      </div>
+    </div>
+
+    <aside class="wallet-result-column">
+      <div class="panel wallet-result-card" aria-live="polite">
+        <div class="panel-kicker">Payment result</div>
+        {% if wallet.payment_signature %}
+          <div class="demo-result-icon {{ 'success' if wallet.status == 'complete' else 'pending' }}">{{ icon('check' if wallet.status == 'complete' else 'clock', 21) }}</div>
+          <h2>{% if wallet.status == 'complete' %}Payment confirmed{% elif wallet.status == 'failed' %}Payment failed{% elif wallet.status == 'needs_review' %}Payment needs review{% else %}Payment in progress{% endif %}</h2>
+          <p>{% if wallet.status == 'complete' %}The Devnet transfer is finalized and recorded below. {% elif wallet.status == 'failed' %}The payment did not reach the checkout. This saved attempt will not be sent again. {% elif wallet.status == 'needs_review' %}The saved payment signature is being checked without creating a new transfer. {% else %}The signed transfer is waiting for finalization. {% endif %}</p>
+          <div class="wallet-result-details">
+            <div><span>Actual sender</span><code>{{ wallet.sender_address }}</code><button type="button" class="copy-button" data-copy="{{ wallet.sender_address }}" aria-label="Copy actual sender address">{{ icon('copy', 14) }} Copy</button></div>
+            <div><span>Recipient</span><code>{{ wallet.recipient_address }}</code><button type="button" class="copy-button" data-copy="{{ wallet.recipient_address }}" aria-label="Copy recipient address">{{ icon('copy', 14) }} Copy</button></div>
+            <div><span>Amount</span><strong>{{ wallet.selected_sol }} SOL</strong></div>
+            <div><span>Transaction ID</span><code>{{ wallet.payment_signature }}</code><button type="button" class="copy-button" data-copy="{{ wallet.payment_signature }}" aria-label="Copy transaction ID">{{ icon('copy', 14) }} Copy</button></div>
+          </div>
+          <a class="button button-quiet button-full" href="https://explorer.solana.com/tx/{{ wallet.payment_signature }}?cluster=devnet" target="_blank" rel="noreferrer">Open on Solana Explorer {{ icon('external', 14) }}</a>
+          {% if wallet.status in ['complete', 'failed', 'needs_review'] %}<form method="post" action="{{ url_for('main.create_test_wallet') }}" data-loading-text="Creating New Test…"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="button button-primary button-full" type="submit">New Test {{ icon('arrow-right', 14) }}</button></form>{% endif %}
+          {% if wallet.status == 'needs_review' %}<form method="post" action="{{ url_for('main.recheck_test_wallet_payment') }}" data-loading-text="Rechecking Devnet…"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="session_id" value="{{ wallet.id }}"><button class="button button-primary button-full" type="submit">Recheck Payment Status {{ icon('refresh', 14) }}</button></form>{% endif %}
+        {% else %}
+          <div class="demo-result-placeholder"><div class="placeholder-orbit">{{ icon('wallet', 23) }}</div><h2>Your transaction will appear here.</h2><p>Enter an active RemaSol checkout address and choose how much test SOL to send.</p></div>
+        {% endif %}
+      </div>
+      <div class="demo-safety-note">{{ icon('shield', 15) }} The Test Wallet can send only to active RemaSol checkout addresses. The maximum is enforced per payment, with real Devnet treasury and sender balance checks.</div>
+    </aside>
+  {% endif %}
+</section>
+
+{% if wallet %}<section class="wallet-how section-wrap"><div><span class="detail-label">Treasury approval</span><strong>RemaSol's treasury approves valid test payments automatically within its configured limits.</strong></div><div><span class="detail-label">Per-payment limit</span><strong>{{ max_payment_sol }} SOL is the maximum for each payment. It is not a lifetime visitor balance.</strong></div><div><span class="detail-label">Need a clean run?</span><strong>Choose New Test to create a unique sender and start again.</strong></div></section>{% endif %}
+{% endblock %}

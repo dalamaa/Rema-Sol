@@ -12,13 +12,13 @@
 <section class="recovery-grid section-wrap">
   <div class="panel recovery-form-panel">
     <div class="panel-heading"><div><span class="panel-kicker">Check eligibility</span><h2>Find your payment</h2></div><span class="step-count">1</span></div>
-    <p class="card-lede">Your refund destination was locked when this checkout was created. It cannot be edited from this page.</p>
+    <p class="card-lede">Recovery checks the private Merchant Code, the sender wallet, and the finalized Solana transaction together. Your locked refund destination is never editable here.</p>
     <form method="post" action="{{ url_for('main.check_recovery') }}" class="stack-form" data-loading-text="Checking eligibility…">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <label>Checkout address or order ID<input name="reference" value="{{ reference or '' }}" placeholder="Paste the payment address or order ID" autocomplete="off" spellcheck="false" required></label>
-      <label>Private claim code<input type="password" name="claim_code" value="{{ claim_code or '' }}" placeholder="Your saved claim code" autocomplete="off" spellcheck="false" required></label>
-      <label>Original transaction signature<input name="signature" value="{{ signature or '' }}" placeholder="Paste the finalized transaction signature" autocomplete="off" spellcheck="false" required><span class="field-hint">RemaSol never trusts a screenshot or a user-entered amount.</span></label>
-      <button class="button button-primary button-full" type="submit">Check payment {{ icon('arrow-right', 16) }}</button>
+      <label>Merchant Code<input type="password" name="merchant_code" value="{{ merchant_code or '' }}" placeholder="Paste the private code from checkout" autocomplete="off" spellcheck="false" required></label>
+      <label>Sender Wallet Address<input name="sender_address" value="{{ sender_address or '' }}" placeholder="Wallet that sent the payment" autocomplete="off" spellcheck="false" required></label>
+      <label>Solana Transaction ID<input name="signature" value="{{ signature or '' }}" placeholder="Paste the finalized transaction ID" autocomplete="off" spellcheck="false" required><span class="field-hint">RemaSol checks the destination, sender, finalization, and amount on-chain.</span></label>
+      <button class="button button-primary button-full" type="submit">Check recovery eligibility {{ icon('arrow-right', 16) }}</button>
     </form>
     <div class="security-list"><div>{{ icon('lock', 15) }} Claim code is checked against this specific checkout.</div><div>{{ icon('database', 15) }} Refund amount comes from the verified transfer, not the form.</div></div>
   </div>
@@ -29,7 +29,7 @@
       {% if order and state == 'eligible' %}
         <div class="eligibility-amount"><span>Refundable excess</span><strong>{{ order.excess_sol }} <small>SOL</small></strong><div>Product price {{ order.price_sol }} SOL · received {{ order.payment_sol }} SOL</div></div>
         <div class="locked-destination result-destination"><span class="destination-icon">{{ icon('lock', 15) }}</span><div><span>Returning to locked destination</span><code>{{ order.refund_destination }}</code></div></div>
-        <form method="post" action="{{ url_for('main.request_recovery') }}" class="request-form" data-loading-text="Submitting one refund…"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="reference" value="{{ reference }}"><input type="hidden" name="claim_code" value="{{ claim_code }}"><input type="hidden" name="signature" value="{{ signature }}"><button class="button button-gold button-full" type="submit">Request {{ order.excess_sol }} SOL refund {{ icon('arrow-right', 16) }}</button></form>
+        <form method="post" action="{{ url_for('main.request_recovery') }}" class="request-form" data-loading-text="Submitting one refund…"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="merchant_code" value="{{ merchant_code }}"><input type="hidden" name="sender_address" value="{{ sender_address }}"><input type="hidden" name="signature" value="{{ signature }}"><button class="button button-gold button-full" type="submit">Request {{ order.excess_sol }} SOL refund {{ icon('arrow-right', 16) }}</button></form>
         <p class="action-note">The refund amount is fixed by the verified excess. The merchant's retained proceeds cover the network fee for this demo.</p>
       {% elif order and state in ['submitted', 'finalized', 'needs_review'] %}
         <div class="status-summary"><div><span>Refund amount</span><strong>{{ order.refund_amount_lamports|sol }} SOL</strong></div><div><span>Destination</span><code>{{ order.refund_destination|short }}</code></div>{% if order.transaction_signature %}<div><span>Transaction</span><a href="https://explorer.solana.com/tx/{{ order.transaction_signature }}?cluster=devnet" target="_blank" rel="noreferrer">{{ order.transaction_signature|short }} {{ icon('external', 13) }}</a></div>{% endif %}</div>

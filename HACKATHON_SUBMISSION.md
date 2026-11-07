@@ -6,7 +6,7 @@ Small merchants accepting direct cryptocurrency payments eventually receive an a
 
 ## The solution
 
-RemaSol is an open-source, self-hosted Solana payment recovery tool. It gives every checkout a unique payment room and captures the customer's refund destination before payment. Once a customer provides a private claim code and the original transaction signature, RemaSol verifies the finalized native SOL transfer directly on Devnet. If the payment is over the product price, the customer can request exactly the verified excess.
+RemaSol is an open-source, self-hosted Solana payment recovery tool. It gives every checkout a unique payment room and keeps the purchase flow focused on payment. Once a customer provides a private claim code, sender wallet, and original transaction signature, RemaSol verifies the finalized native SOL transfer directly on Devnet. The original sender is derived from that verified transfer; without suitable proof of sender-wallet control, an excess-payment case goes to manual review. If the payment is over the product price, the customer can request exactly the verified excess.
 
 The core promise is simple: **your customers shouldn't need to contact support just because they sent too much SOL.**
 
@@ -27,7 +27,8 @@ Self-hosting does not mean zero operating costs. Merchants still pay network fee
 - Every order gets a distinct payment address.
 - Claim codes use cryptographically secure randomness and are stored only as salted PBKDF2 hashes.
 - Private checkout keys are encrypted at rest with a Fernet key outside SQLite.
-- Refund destinations are locked before payment.
+- Ordinary customers cannot submit or replace a refund destination; the verified transfer sender is the only derived destination.
+- Funded demo orders explicitly bind the application-controlled buyer wallet before payment.
 - The source address is read from the transfer instruction; RemaSol does not assume the fee payer is the customer.
 - Unsupported or ambiguous transfer patterns are sent to manual review.
 - Unique database constraints plus `BEGIN IMMEDIATE` reserve one refund per order.
@@ -44,7 +45,13 @@ Python 3.11+, Flask, Jinja, SQLite, `solana-py`, `solders`, `cryptography`, HTML
 
 ## What is implemented
 
-The merchant console, unique checkout wallet, claim flow, Devnet RPC verification adapter, exact/under/overpayment states, durable refund state machine, idempotent refund path, Explorer receipts, rate limits, UI, documentation, and mocked test suite are implemented.
+The merchant console, unique checkout wallet, claim flow, Devnet RPC verification adapter, exact/under/overpayment states, durable refund state machine, idempotent refund path, Explorer receipts, standalone Test Wallet, dedicated admin treasury, sender-bound recovery form, rate limits, UI, documentation, and mocked test suite are implemented.
+
+## Public demo and treasury boundary
+
+The Test Wallet at `/wallet` uses a generated temporary sender wallet and can pay only active RemaSol checkout addresses. Visitors may test 0.0005–0.02 SOL per payment, including exact and overpayment cases; `/demo` redirects to `/wallet` for compatibility. The merchant treasury at `/merchant/treasury` is authenticated, capped, manually funded, and separate from customer checkout wallets. Wallet creation is not a treasury operation; only in-progress funded operations consume the atomic concurrency limit, while unresolved signed transfers retain their reservations. There is no cumulative visitor credit or arbitrary withdrawal flow.
+
+The Test Wallet records the funding and payment signed transaction bytes before broadcast. If an RPC response is lost, retries reuse the saved signature and move to review when finalization cannot be established. It does not create checkout credentials; customers use the separate checkout and recovery pages when an excess payment needs review.
 
 ## What remains before mainnet production
 

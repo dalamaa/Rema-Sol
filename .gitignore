@@ -14,6 +14,9 @@ __pycache__/
 .venv/
 venv/
 instance/
+backups/
+*.sqlite3.bak*
+*.sqlite.bak*
 tmp/
 temp/
 .tmp/
@@ -24,8 +27,12 @@ temp/
 .DS_Store
 *.log
 logs/
+.remasol.pid
+.remasol.start.lock
+remasol.log
 wallets/
 secrets/
+scripts/set_merchant_password.py
 *.pem
 *.key
 *.p12

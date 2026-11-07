@@ -16,10 +16,13 @@ class FakeSolanaService:
         self.payments = {}
         self.balances = {}
         self.prepared = {}
+        self.private_to_public = {}
         self.prepare_calls = 0
         self.broadcast_calls = 0
         self.broadcast_timeout = False
+        self.broadcast_fail_calls = set()
         self.refund_status = "finalized"
+        self.signature_statuses = {}
 
     def validate_address(self, address):
         return bool(address and 3 <= len(address) <= 120 and " " not in address)
@@ -29,7 +32,10 @@ class FakeSolanaService:
 
     def generate_wallet(self):
         self.wallet_count += 1
-        return f"payment-wallet-{self.wallet_count}", f"private-key-{self.wallet_count}".encode()
+        address = f"payment-wallet-{self.wallet_count}"
+        private_key = f"private-key-{self.wallet_count}".encode()
+        self.private_to_public[private_key] = address
+        return address, private_key
 
     def verify_payment(self, signature, destination, expected_lamports):
         payment = self.payments.get(signature)
@@ -46,6 +52,9 @@ class FakeSolanaService:
     def get_balance(self, address):
         return self.balances.get(address, 2_000_000_000)
 
+    def get_minimum_balance_for_rent_exemption(self, data_length=0):
+        return 890_880
+
     def prepare_refund(self, private_key, destination, amount_lamports):
         self.prepare_calls += 1
         signature = f"refund-signature-{self.prepare_calls}"
@@ -53,14 +62,44 @@ class FakeSolanaService:
         self.prepared[signed] = signature
         return RefundPreparation(signed, signature)
 
+    def prepare_transfer(self, private_key, destination, amount_lamports):
+        self.prepare_calls += 1
+        signature = f"transfer-signature-{self.prepare_calls}"
+        signed = f"signed-{signature}".encode()
+        self.prepared[signed] = signature
+        self.payments[signature] = {
+            "destination": destination,
+            "amount": amount_lamports,
+            "source": self.private_to_public.get(private_key, "source-wallet"),
+        }
+        return RefundPreparation(signed, signature)
+
     def broadcast_signed_transaction(self, signed_transaction):
         self.broadcast_calls += 1
         if self.broadcast_timeout:
             raise TimeoutError("simulated connection loss after broadcast")
+        if self.broadcast_calls in self.broadcast_fail_calls:
+            raise RuntimeError("simulated preflight rejection")
         return self.prepared[signed_transaction]
 
     def signature_status(self, signature):
-        return self.refund_status
+        return self.signature_statuses.get(signature, self.refund_status)
+
+    def get_signatures_for_address(self, address, limit=20):
+        rows = []
+        for signature, payment in reversed(list(self.payments.items())):
+            if payment.get("destination") != address:
+                continue
+            status = self.signature_status(signature)
+            rows.append(
+                {
+                    "signature": signature,
+                    "err": {"simulated": True} if status == "failed" else None,
+                    "confirmationStatus": None if status == "failed" else status,
+                    "blockTime": 1_700_000_000,
+                }
+            )
+        return rows[:limit]
 
 
 @pytest.fixture

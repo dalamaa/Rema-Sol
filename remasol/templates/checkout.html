@@ -1,44 +1,61 @@
 {% extends "base.html" %}
 {% block content %}
 {% if order %}
-<section class="checkout-shell section-wrap checkout-room">
-  <div class="room-main">
-    <a class="back-link" href="{{ url_for('main.product_checkout', slug=order.product_slug) }}">{{ icon('arrow-right', 15) }} Back</a>
-    <div class="room-header"><div><div class="eyebrow"><span class="eyebrow-line"></span> Payment room</div><h1>{{ order.product_name }}</h1></div><span class="status-pill status-{{ order.status }}"><span></span>{{ order.status|status_label }}</span></div>
-    {% if just_created %}
-      <div class="claim-banner"><div class="claim-banner-icon">{{ icon('lock', 20) }}</div><div><strong>Save your private claim code</strong><p>It is shown once. Keep it with your payment details; RemaSol stores only a secure hash.</p><div class="claim-code" data-copy="{{ claim_code }}"><span>{{ claim_code }}</span><button type="button" class="copy-button">{{ icon('copy', 15) }} Copy</button></div></div></div>
-    {% endif %}
-    <div class="payment-panel">
-      <div class="payment-label">Send exactly what you intend to pay</div>
-      <div class="payment-amount"><span>{{ order.price_sol }}</span> <small>SOL</small></div>
-      <div class="address-box"><div><span class="address-label">Unique payment address</span><code>{{ order.payment_address }}</code></div><button type="button" class="copy-button" data-copy="{{ order.payment_address }}">{{ icon('copy', 16) }} Copy</button></div>
-      <div class="payment-instructions"><div><span class="instruction-number">1</span><span>Send the product price from your Solana wallet on Devnet.</span></div><div><span class="instruction-number">2</span><span>Wait for the transfer to finalize, then paste its signature below.</span></div><div><span class="instruction-number">3</span><span>If you send extra, use your claim code on the recovery page.</span></div></div>
-    </div>
-    <div class="locked-destination"><span class="destination-icon">{{ icon('lock', 15) }}</span><div><span>Refund destination locked</span><code>{{ order.refund_destination }}</code></div><span class="locked-check">{{ icon('check', 15) }}</span></div>
+<section class="checkout-page section-wrap">
+  <div class="checkout-nav-row">
+    <a class="back-link" href="{{ url_for('main.product_checkout', slug=order.product_slug) }}">{{ icon('arrow-right', 15) }} Back to product</a>
+    <span class="checkout-step">Private checkout · Solana Devnet</span>
   </div>
-  <aside class="room-side">
-    <div class="side-card"><span class="panel-kicker">Verify a payment</span><h2>Already sent SOL?</h2><p>RemaSol reads the finalized native transfer directly from Solana Devnet.</p>
-      {% if verification %}
-        {% if verification.state == 'overpayment' %}<div class="result-block result-gold" role="status"><span class="result-icon">{{ icon('check', 18) }}</span><div><strong>Overpayment verified</strong><p>{{ verification.amount_lamports|sol }} SOL received · {{ (verification.amount_lamports - order.price_lamports)|sol }} SOL excess</p></div></div>
-        {% elif verification.state == 'exact' %}<div class="result-block result-green" role="status"><span class="result-icon">{{ icon('check', 18) }}</span><div><strong>Payment verified</strong><p>The amount matches the product price exactly.</p></div></div>
-        {% elif verification.state == 'underpayment' %}<div class="result-block result-warn" role="status"><span class="result-icon">{{ icon('alert', 18) }}</span><div><strong>Underpayment</strong><p>{{ verification.amount_lamports|sol }} SOL received. More is needed to complete the order.</p></div></div>
-        {% else %}<div class="result-block result-warn" role="alert"><span class="result-icon">{{ icon('alert', 18) }}</span><div><strong>{{ verification.state|status_label }}</strong><p>{{ verification.reason or 'The payment could not be verified safely.' }}</p></div></div>{% endif %}
+
+  <div class="checkout-grid checkout-grid-simple">
+    <main class="checkout-main">
+      <div class="checkout-product-summary">
+        <figure class="ebook-cover ebook-cover-small" role="img" aria-label="Book cover for The Digital Creator’s Guide">
+          <div class="cover-topline"><span>REMA</span><span>01</span></div>
+          <div class="cover-rule"></div>
+          <div class="cover-kicker">A practical guide to</div>
+          <div class="cover-title">The Digital<br>Creator’s<br>Guide</div>
+          <div class="cover-orbit"><span></span><i></i></div>
+          <div class="cover-bottomline">DIGITAL EDITION</div>
+        </figure>
+        <div>
+          <div class="product-eyebrow">Digital ebook</div>
+          <h1>{{ order.product_name|replace("'", "’") }}</h1>
+          <p>{{ order.product_description or 'A practical digital guide for creators who want a clearer way to make and share their work.' }}</p>
+          <div class="checkout-summary-price"><span>{{ order.price_sol }}</span> SOL</div>
+        </div>
+      </div>
+
+      {% if claim_code %}
+      <div class="claim-banner"><div class="claim-banner-icon">{{ icon('lock', 20) }}</div><div><strong>Save your private Merchant Code</strong><p>Keep this code with your order and payment transaction ID. It is private to this checkout.</p><div class="claim-code" data-copy="{{ claim_code }}"><span>{{ claim_code }}</span><button type="button" class="copy-button" aria-label="Copy private Merchant Code">{{ icon('copy', 15) }} Copy Code</button></div></div></div>
       {% endif %}
-      {% if order.status in ['awaiting_payment', 'underpaid'] or not order.payment_signature %}
-      <form method="post" action="{{ url_for('main.verify_checkout_payment', order_id=order.id) }}" class="stack-form" data-loading-text="Checking finalized payment…">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <label>Transaction signature<input name="signature" value="{{ verification.signature if verification and verification.signature else '' }}" placeholder="Paste the Solana transaction signature" autocomplete="off" spellcheck="false" required><span class="field-hint">A transaction ID is public. It is not a claim code.</span></label>
-        <label>Private claim code<input name="claim_code" value="{{ claim_code or '' }}" placeholder="Enter the code from checkout" autocomplete="off" spellcheck="false" required></label>
-        <button class="button button-primary button-full" type="submit">Verify payment {{ icon('arrow-right', 16) }}</button>
-      </form>
-      {% else %}
-        <div class="verified-lock"><span>{{ icon('check', 15) }}</span> Payment is already verified for this room.</div>
-      {% endif %}
-    </div>
-    <div class="side-note">{{ icon('info', 15) }} This Devnet room expires {{ order.expires_at[:16].replace('T', ' ') }} UTC if it remains unpaid.</div>
-  </aside>
+
+      <div class="payment-panel">
+        <div class="payment-panel-heading"><div><span class="payment-label">Your order</span><h2>Send {{ order.price_sol }} SOL</h2></div><span class="status-pill status-{{ order.status }}"><span></span>{{ order.status|status_label }}</span></div>
+        <div class="payment-amount"><span>{{ order.price_sol }}</span> <small>SOL</small></div>
+        <div class="address-box"><div><span class="address-label">Unique payment wallet</span><code class="payment-address-code">{{ order.payment_address }}</code></div><button type="button" class="copy-button" data-copy="{{ order.payment_address }}" aria-label="Copy unique payment wallet address">{{ icon('copy', 16) }} Copy Address</button></div>
+        <div class="payment-actions"><a class="button button-quiet" href="solana:{{ order.payment_address }}?amount={{ order.price_sol }}">{{ icon('wallet', 16) }} Pay with Solana Pay</a><span class="payment-network">{{ icon('shield', 14) }} Solana Devnet · native SOL</span></div>
+        <div class="payment-instructions"><div><span class="instruction-number">1</span><span>Confirm the ebook title and exact price above.</span></div><div><span class="instruction-number">2</span><span>Send {{ order.price_sol }} SOL to this unique payment wallet on Devnet.</span></div><div><span class="instruction-number">3</span><span>Keep the transaction ID and Merchant Code until the order is complete.</span></div></div>
+      </div>
+      <div class="checkout-footnote">{{ icon('database', 15) }} The receiving address belongs only to this order. Payment records are checked from finalized Solana activity.</div>
+    </main>
+
+    <aside class="checkout-side">
+      <div class="side-card order-ready-card">
+        <div class="card-topline"><span class="panel-kicker">Order ready</span><span class="step-count">Devnet</span></div>
+        <h2>Everything you need to pay</h2>
+        <p class="card-lede">This is a private payment room for your ebook order. No account or wallet connection is required.</p>
+        <div class="checkout-check-list">
+          <div><span>{{ icon('check', 15) }}</span><strong>Unique receiving address</strong><small>Created for this order only.</small></div>
+          <div><span>{{ icon('check', 15) }}</span><strong>Private Merchant Code</strong><small>Save it before leaving this page.</small></div>
+          <div><span>{{ icon('check', 15) }}</span><strong>Clear price in SOL</strong><small>{{ order.price_sol }} SOL on Solana Devnet.</small></div>
+        </div>
+      </div>
+      <div class="side-note">{{ icon('info', 15) }} Send only test SOL on Devnet. Keep the transaction ID with your Merchant Code if you need to look up the order later.</div>
+    </aside>
+  </div>
 </section>
 {% else %}
-<section class="empty-page section-wrap"><div class="empty-mark">{{ icon('lock', 28) }}</div><div class="eyebrow"><span class="eyebrow-line"></span> Private checkout</div><h1>We could not verify this room.</h1><p>Use the original payment room and claim code. Public transaction IDs alone cannot unlock a checkout.</p><a class="button button-primary" href="{{ url_for('main.recover') }}">Go to recovery {{ icon('arrow-right', 16) }}</a></section>
+<section class="empty-page section-wrap"><div class="empty-mark">{{ icon('lock', 28) }}</div><div class="eyebrow"><span class="eyebrow-line"></span> Private checkout</div><h1>We could not verify this room.</h1><p>Use the original payment room and Merchant Code. Public transaction IDs alone cannot unlock a checkout.</p><a class="button button-primary" href="{{ url_for('main.product_checkout', slug='the-digital-creator-s-guide') }}">Back to ebook {{ icon('arrow-right', 16) }}</a></section>
 {% endif %}
 {% endblock %}

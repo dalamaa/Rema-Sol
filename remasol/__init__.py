@@ -9,6 +9,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .config import Config
 from .db import close_db, init_db
+from .demo import DemoTreasuryService
 from .auth import merchant_authenticated
 from .rate_limit import RateLimiter
 from .routes import bp
@@ -31,6 +32,12 @@ def create_app(test_config: dict | None = None) -> Flask:
         CHECKOUT_EXPIRY_MINUTES=int(os.environ.get("CHECKOUT_EXPIRY_MINUTES", "60")),
         MAX_UNPAID_CHECKOUTS_PER_IP=int(os.environ.get("MAX_UNPAID_CHECKOUTS_PER_IP", "8")),
         REFUND_FEE_BUFFER_LAMPORTS=int(os.environ.get("REFUND_FEE_BUFFER_LAMPORTS", "10000")),
+        DEMO_PRODUCT_SLUG=os.environ.get("DEMO_PRODUCT_SLUG", "the-digital-creator-s-guide"),
+        DEMO_MIN_PAYMENT_LAMPORTS=int(os.environ.get("DEMO_MIN_PAYMENT_LAMPORTS", "500000")),
+        DEMO_MAX_PAYMENT_LAMPORTS=int(os.environ.get("DEMO_MAX_PAYMENT_LAMPORTS", "20000000")),
+        DEMO_FUNDING_FEE_BUFFER_LAMPORTS=int(os.environ.get("DEMO_FUNDING_FEE_BUFFER_LAMPORTS", "100000")),
+        DEMO_DAILY_BUDGET_LAMPORTS=int(os.environ.get("DEMO_DAILY_BUDGET_LAMPORTS", "100000000")),
+        DEMO_MAX_CONCURRENT_DEMOS=int(os.environ.get("DEMO_MAX_CONCURRENT_DEMOS", "3")),
         MIN_CLAIM_ATTEMPTS_PER_MINUTE=int(os.environ.get("MIN_CLAIM_ATTEMPTS_PER_MINUTE", "12")),
         MERCHANT_USERNAME=os.environ.get("REMA_SOL_MERCHANT_USERNAME", "merchant"),
         MERCHANT_PASSWORD_HASH=os.environ.get("REMA_SOL_MERCHANT_PASSWORD_HASH", ""),
@@ -63,6 +70,13 @@ def create_app(test_config: dict | None = None) -> Flask:
         secret_key=app.config["SECRET_KEY"],
         wallet_encryption_key=app.config.get("WALLET_ENCRYPTION_KEY", ""),
         solana=solana_service,
+        config=app.config,
+    )
+    app.extensions["demo"] = DemoTreasuryService(
+        db_path=app.config["DATABASE"],
+        wallet_encryption_key=app.config.get("WALLET_ENCRYPTION_KEY", ""),
+        solana=solana_service,
+        engine=app.extensions["engine"],
         config=app.config,
     )
 

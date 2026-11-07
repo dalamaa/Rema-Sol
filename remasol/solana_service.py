@@ -199,15 +199,47 @@ class SolanaService:
         except Exception as error:
             raise SolanaRpcError("Devnet balance lookup failed") from error
 
-    def prepare_refund(
+    def get_minimum_balance_for_rent_exemption(self, data_length: int = 0) -> int:
+        """Return the current lamport reserve needed for a system account."""
+        self._require_sdk()
+        try:
+            response = self.client.get_minimum_balance_for_rent_exemption(data_length)
+            value = getattr(response, "value", None)
+            if value is None and isinstance(response, dict):
+                value = response.get("result")
+            return int(value or 0)
+        except Exception as error:
+            raise SolanaRpcError("Devnet rent exemption lookup failed") from error
+
+    def get_signatures_for_address(self, address: str, limit: int = 20) -> list[dict[str, Any]]:
+        """Return recent signature metadata for a checkout address.
+
+        This is deliberately read-only. It lets the merchant refresh payment
+        records from the unique checkout address without asking the customer
+        to submit a recovery claim.
+        """
+        self._require_sdk()
+        try:
+            response = self.client.get_signatures_for_address(
+                self.Pubkey.from_string(address),
+                limit=limit,
+                commitment=self.finalized,
+            )
+            result = self._find_result(response)
+            return result if isinstance(result, list) else []
+        except Exception as error:
+            raise SolanaRpcError("Devnet payment history lookup failed") from error
+
+    def prepare_transfer(
         self,
-        encrypted_private_key: bytes,
+        private_key: bytes,
         destination: str,
         amount_lamports: int,
     ) -> RefundPreparation:
+        """Build one signed native SOL transfer without broadcasting it."""
         self._require_sdk()
         try:
-            source = self.Keypair.from_bytes(encrypted_private_key)
+            source = self.Keypair.from_bytes(private_key)
             latest = self.client.get_latest_blockhash(commitment=self.finalized).value.blockhash
             instruction = self.transfer(
                 self.TransferParams(
@@ -222,6 +254,17 @@ class SolanaService:
             signature = str(transaction.signatures[0])
             return RefundPreparation(signed_bytes, signature)
         except Exception as error:
+            raise SolanaRpcError("Could not sign native SOL transfer") from error
+
+    def prepare_refund(
+        self,
+        encrypted_private_key: bytes,
+        destination: str,
+        amount_lamports: int,
+    ) -> RefundPreparation:
+        try:
+            return self.prepare_transfer(encrypted_private_key, destination, amount_lamports)
+        except SolanaRpcError as error:
             raise SolanaRpcError("Could not sign refund transaction") from error
 
     def broadcast_signed_transaction(self, signed_transaction: bytes) -> str:
@@ -238,12 +281,16 @@ class SolanaService:
             if value is None and isinstance(response, dict):
                 value = response.get("result")
             if not value:
-                raise SolanaRpcError("Devnet did not return a refund signature")
+                raise SolanaRpcError("Devnet did not return a transaction signature")
             return str(value)
         except SolanaRpcError:
             raise
         except Exception as error:
-            raise SolanaRpcError("Devnet refund broadcast failed") from error
+            detail = str(error).strip()
+            message = "Devnet transaction broadcast failed"
+            if detail:
+                message = f"{message}: {detail}"
+            raise SolanaRpcError(message) from error
 
     def signature_status(self, signature: str) -> str:
         self._require_sdk()
@@ -258,4 +305,4 @@ class SolanaService:
                 return "failed"
             return status.get("confirmationStatus", "unknown")
         except Exception as error:
-            raise SolanaRpcError("Devnet refund status lookup failed") from error
+            raise SolanaRpcError("Devnet transaction status lookup failed") from error

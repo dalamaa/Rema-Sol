@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0a0d16">
   <title>{% if title %}{{ title }} · {% endif %}RemaSol</title>
-  <meta name="description" content="RemaSol helps self-hosted Solana merchants return accidental overpayments with clear on-chain proof.">
+  <meta name="description" content="RemaSol is a clear, private checkout for digital products on Solana Devnet, with recovery when a payment is higher than the price.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Orbitron:wght@500;600;700&display=swap" rel="stylesheet">
@@ -21,6 +21,7 @@
         <span>Rema<span>Sol</span></span>
       </a>
       <nav class="main-nav" aria-label="Primary navigation">
+        <a href="{{ url_for('main.test_wallet') }}">Test Wallet</a>
         <a href="{{ url_for('main.merchant_dashboard') if merchant_authenticated else url_for('main.merchant_login') }}">Merchant console</a>
         <a href="{{ url_for('main.recover') }}">Recover a payment</a>
       </nav>
@@ -30,6 +31,7 @@
       </div>
     </header>
     <nav class="mobile-nav section-wrap" aria-label="Mobile navigation">
+      <a href="{{ url_for('main.test_wallet') }}">Test Wallet</a>
       <a href="{{ url_for('main.merchant_dashboard') if merchant_authenticated else url_for('main.merchant_login') }}">Merchant console</a>
       <a href="{{ url_for('main.recover') }}">Recover a payment</a>
     </nav>

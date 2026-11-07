@@ -145,12 +145,85 @@ class PaymentEngine:
         finally:
             connection.close()
 
+    def get_active_checkout_by_payment_address(self, payment_address: str) -> dict[str, Any] | None:
+        """Return only an unpaid, unexpired checkout owned by RemaSol."""
+        payment_address = (payment_address or "").strip()
+        if not payment_address:
+            return None
+        connection = self._connection()
+        try:
+            row = connection.execute(
+                "SELECT id FROM orders WHERE payment_address = ?",
+                (payment_address,),
+            ).fetchone()
+        finally:
+            connection.close()
+        if not row:
+            return None
+        order = self.get_order(row["id"])
+        if not order:
+            return None
+        if order["status"] != "awaiting_payment":
+            return None
+        if order.get("payment_signature") or order["expires_at"] <= iso_now():
+            return None
+        return order
+
     def create_order(self, product_slug: str, refund_destination: str, client_ip: str) -> tuple[dict[str, Any], str]:
+        """Create a trusted pre-bound order for existing integrations.
+
+        Public customer checkout uses ``create_order_draft``. This entry point
+        remains for trusted callers such as the demo and legacy integrations
+        that already supply a controlled refund destination.
+        """
+        return self._create_order(
+            product_slug,
+            refund_destination,
+            client_ip,
+            allow_empty=False,
+            destination_mode="legacy_locked",
+            sender_ownership_verified=True,
+        )
+
+    def create_demo_order(
+        self, product_slug: str, refund_destination: str, client_ip: str
+    ) -> tuple[dict[str, Any], str]:
+        """Create a demo order whose refund destination is app-controlled."""
+        return self._create_order(
+            product_slug,
+            refund_destination,
+            client_ip,
+            allow_empty=False,
+            destination_mode="internal_demo",
+            sender_ownership_verified=True,
+        )
+
+    def create_order_draft(self, product_slug: str, client_ip: str) -> tuple[dict[str, Any], str]:
+        """Create an ordinary payment room without a refund destination."""
+        return self._create_order(
+            product_slug,
+            "",
+            client_ip,
+            allow_empty=True,
+            destination_mode="none",
+            sender_ownership_verified=False,
+        )
+
+    def _create_order(
+        self,
+        product_slug: str,
+        refund_destination: str,
+        client_ip: str,
+        *,
+        allow_empty: bool,
+        destination_mode: str,
+        sender_ownership_verified: bool,
+    ) -> tuple[dict[str, Any], str]:
         product = self.get_product(product_slug)
         if not product:
             raise DomainError("That product is not available.", "not_found")
         refund_destination = (refund_destination or "").strip()
-        if not self.solana.validate_address(refund_destination):
+        if (not allow_empty or refund_destination) and not self.solana.validate_address(refund_destination):
             raise DomainError("Enter a valid Solana refund destination.", "validation")
 
         connection = self._connection()
@@ -178,6 +251,8 @@ class PaymentEngine:
             "product_id": product["id"],
             "payment_address": payment_address,
             "refund_destination": refund_destination,
+            "refund_destination_mode": destination_mode,
+            "sender_ownership_verified": int(sender_ownership_verified),
             "status": "awaiting_payment",
             "expires_at": (utc_now() + timedelta(minutes=self.config["CHECKOUT_EXPIRY_MINUTES"])).isoformat(),
             "created_at": now,
@@ -192,8 +267,9 @@ class PaymentEngine:
             connection.execute(
                 """INSERT INTO orders
                 (id, product_id, payment_address, encrypted_private_key, claim_code_hash,
-                 refund_destination, client_ip, status, expires_at, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                 refund_destination, refund_destination_mode, sender_ownership_verified,
+                 client_ip, status, expires_at, price_lamports, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     order["id"],
                     product["id"],
@@ -201,9 +277,12 @@ class PaymentEngine:
                     encrypt_private_key(private_key, self.wallet_encryption_key),
                     hash_claim_code(claim_code),
                     refund_destination,
+                    destination_mode,
+                    int(sender_ownership_verified),
                     client_ip,
                     order["status"],
                     order["expires_at"],
+                    product["price_lamports"],
                     now,
                     now,
                 ),
@@ -217,7 +296,7 @@ class PaymentEngine:
         try:
             row = connection.execute(
                 """SELECT o.*, p.name AS product_name, p.slug AS product_slug, p.description AS product_description,
-                p.price_lamports, r.id AS refund_id, r.amount_lamports AS refund_amount_lamports,
+                p.price_lamports AS product_price_lamports, r.id AS refund_id, r.amount_lamports AS refund_amount_lamports,
                 r.destination AS refund_destination_locked, r.status AS refund_status,
                 r.signed_transaction, r.transaction_signature, r.last_error, r.finalized_at
                 FROM orders o JOIN products p ON p.id = o.product_id
@@ -228,6 +307,8 @@ class PaymentEngine:
             if not row:
                 return None
             result = dict(row)
+            if result.get("price_lamports") is None:
+                result["price_lamports"] = result["product_price_lamports"]
             result["price_sol"] = sol_from_lamports(result["price_lamports"])
             result["payment_sol"] = sol_from_lamports(result["payment_lamports"])
             result["excess_lamports"] = max(
@@ -237,6 +318,95 @@ class PaymentEngine:
             return result
         finally:
             connection.close()
+
+    def set_refund_destination(
+        self, order_id: str, claim_code: str, refund_destination: str
+    ) -> dict[str, Any]:
+        """Reject customer-supplied refund destinations.
+
+        Refund destinations are either bound by trusted application code (the
+        funded demo) or derived from the verified payment sender. A claimant
+        must never be able to replace either value from checkout.
+        """
+        self._authorize(self.get_order(order_id), claim_code)
+        raise DomainError(
+            "Refund destinations are derived from the verified payment sender.",
+            "unsupported",
+        )
+
+    def bind_demo_refund_destination(
+        self,
+        order_id: str,
+        sender_address: str,
+        *,
+        connection: sqlite3.Connection | None = None,
+    ) -> dict[str, Any]:
+        """Atomically lock an app-generated Test Wallet sender to a checkout.
+
+        This is intentionally an internal-only operation.  The public recovery
+        forms cannot call it, and an existing non-demo destination is never
+        replaced.  ``connection`` lets the Test Wallet reserve its sender and
+        this binding in one SQLite transaction before any treasury funding is
+        broadcast.
+        """
+        sender_address = (sender_address or "").strip()
+        if not self.solana.validate_address(sender_address):
+            raise DomainError("The generated Test Wallet sender is invalid.", "configuration")
+
+        owns_connection = connection is None
+        connection = connection or self._connection()
+        try:
+            if owns_connection:
+                begin_immediate(connection)
+            row = connection.execute(
+                "SELECT * FROM orders WHERE id = ?", (order_id,)
+            ).fetchone()
+            if not row:
+                raise DomainError("That checkout no longer exists.", "not_found")
+
+            existing_destination = (row["refund_destination"] or "").strip()
+            if existing_destination:
+                if (
+                    existing_destination == sender_address
+                    and row["refund_destination_mode"] == "internal_demo"
+                    and row["sender_ownership_verified"]
+                ):
+                    if owns_connection:
+                        commit(connection)
+                    return dict(row)
+                raise DomainError(
+                    "This checkout already has a locked refund destination.",
+                    "locked",
+                )
+            if row["status"] != "awaiting_payment" or row["payment_signature"]:
+                raise DomainError(
+                    "This checkout is no longer available for a new Test Wallet payment.",
+                    "locked",
+                )
+
+            now = iso_now()
+            updated = connection.execute(
+                """UPDATE orders SET refund_destination = ?,
+                refund_destination_mode = 'internal_demo', sender_ownership_verified = 1,
+                updated_at = ? WHERE id = ? AND status = 'awaiting_payment'
+                AND payment_signature IS NULL AND refund_destination = ''""",
+                (sender_address, now, order_id),
+            )
+            if updated.rowcount != 1:
+                raise DomainError(
+                    "This checkout could not be locked to the Test Wallet safely.",
+                    "locked",
+                )
+            if owns_connection:
+                commit(connection)
+            return dict(connection.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone())
+        except Exception:
+            if owns_connection:
+                rollback(connection)
+            raise
+        finally:
+            if owns_connection:
+                connection.close()
 
     def get_order_by_reference(self, reference: str) -> dict[str, Any] | None:
         reference = (reference or "").strip()
@@ -250,11 +420,28 @@ class PaymentEngine:
         finally:
             connection.close()
 
+    def get_order_by_merchant_code(self, merchant_code: str) -> dict[str, Any] | None:
+        """Find an order without storing the bearer Merchant Code in plaintext."""
+        merchant_code = (merchant_code or "").strip()
+        if not merchant_code:
+            return None
+        connection = self._connection()
+        try:
+            rows = connection.execute(
+                "SELECT id, claim_code_hash FROM orders ORDER BY created_at DESC"
+            ).fetchall()
+        finally:
+            connection.close()
+        for row in rows:
+            if verify_claim_code(merchant_code, row["claim_code_hash"]):
+                return self.get_order(row["id"])
+        return None
+
     def list_orders(self) -> list[dict[str, Any]]:
         connection = self._connection()
         try:
             rows = connection.execute(
-                """SELECT o.*, p.name AS product_name, p.price_lamports,
+                """SELECT o.*, p.name AS product_name, p.price_lamports AS product_price_lamports,
                 r.status AS refund_status, r.transaction_signature
                 FROM orders o JOIN products p ON p.id = o.product_id
                 LEFT JOIN refunds r ON r.order_id = o.id
@@ -263,19 +450,405 @@ class PaymentEngine:
             output = []
             for row in rows:
                 value = dict(row)
+                if value.get("price_lamports") is None:
+                    value["price_lamports"] = value["product_price_lamports"]
                 value["price_sol"] = sol_from_lamports(value["price_lamports"])
                 value["payment_sol"] = sol_from_lamports(value["payment_lamports"])
+                value["payment_status"] = self._payment_status(
+                    value["status"], value.get("refund_status")
+                )
                 output.append(value)
             return output
         finally:
             connection.close()
+
+    def list_merchant_payment_orders(self) -> list[dict[str, Any]]:
+        """Return only orders with a durable, verified incoming payment.
+
+        ``list_orders`` intentionally retains every checkout for address
+        scanning, recovery, and late-payment handling. Merchant activity views
+        must use this filtered projection so creating a checkout cannot appear
+        as a zero-value payment.
+        """
+        return [order for order in self.list_orders() if self._has_verified_payment(order)]
+
+    @staticmethod
+    def _payment_status(status: str | None, refund_status: str | None = None) -> str:
+        if refund_status == "finalized":
+            return "refunded"
+        return {
+            "awaiting_payment": "pending",
+            "payment_pending": "pending",
+            "paid_exact": "paid",
+            "underpaid": "underpaid",
+            "overpaid": "overpaid",
+            "refund_processing": "overpaid",
+            "refund_submitted": "overpaid",
+            "refund_finalized": "refunded",
+            "payment_failed": "failed",
+            "failed": "failed",
+            "needs_review": "needs_review",
+        }.get(status or "", "pending")
+
+    @staticmethod
+    def _has_verified_payment(order: dict[str, Any]) -> bool:
+        """Return whether an order has a durable, verified transfer record."""
+        return bool(
+            order.get("payment_signature")
+            and order.get("payment_source_address")
+            and order.get("payment_lamports") is not None
+            and order.get("status")
+            in {
+                "paid_exact",
+                "underpaid",
+                "overpaid",
+                "refund_processing",
+                "refund_submitted",
+                "refund_finalized",
+                "needs_review",
+            }
+        )
+
+    @staticmethod
+    def _verified_payment_status(order: dict[str, Any]) -> str:
+        """Classify a verified payment from its amount and refund state."""
+        if order.get("refund_status") == "finalized":
+            return "refunded"
+        amount = int(order["payment_lamports"])
+        expected = int(order["price_lamports"])
+        if amount < expected:
+            return "underpaid"
+        if amount > expected:
+            return "overpaid"
+        return "paid"
+
+    def list_refunds(self) -> list[dict[str, Any]]:
+        connection = self._connection()
+        try:
+            rows = connection.execute(
+                """SELECT r.*, o.product_id, o.payment_signature AS original_payment_signature,
+                o.payment_address, p.name AS product_name
+                FROM refunds r
+                JOIN orders o ON o.id = r.order_id
+                JOIN products p ON p.id = o.product_id
+                ORDER BY r.updated_at DESC"""
+            ).fetchall()
+            output = []
+            for row in rows:
+                value = dict(row)
+                value["amount_sol"] = sol_from_lamports(value["amount_lamports"])
+                value["refund_timestamp"] = value.get("finalized_at") or value.get("updated_at")
+                output.append(value)
+            return output
+        finally:
+            connection.close()
+
+    def record_verified_payment(
+        self,
+        order_id: str,
+        verification: PaymentVerification,
+        expected_sender: str | None = None,
+    ) -> tuple[dict[str, Any], PaymentVerification]:
+        """Persist an RPC-verified payment without requiring a customer claim.
+
+        This is an internal merchant refresh path. It still enforces the same
+        destination, signature uniqueness, and sender binding rules as the
+        customer recovery path; it only removes the claim-code requirement.
+        """
+        order = self.get_order(order_id)
+        if not order:
+            return {}, PaymentVerification(
+                "needs_review", signature=verification.signature, reason="Checkout order not found"
+            )
+        if verification.state not in {"exact", "underpayment", "overpayment"}:
+            return order, verification
+        signature = (verification.signature or "").strip()
+        if not signature:
+            return order, PaymentVerification(
+                "needs_review", reason="Verified payment did not include a signature"
+            )
+        if expected_sender and verification.source_address != expected_sender:
+            return order, PaymentVerification(
+                "needs_review", signature=signature, reason="Payment sender did not match the saved sender wallet"
+            )
+        if (
+            order.get("refund_destination_mode") == "internal_demo"
+            and order.get("refund_destination") != verification.source_address
+        ):
+            return order, PaymentVerification(
+                "needs_review", signature=signature, reason="The controlled demo wallet was not the verified payment sender"
+            )
+
+        connection = self._connection()
+        try:
+            begin_immediate(connection)
+            assigned = connection.execute(
+                "SELECT id FROM orders WHERE payment_signature = ?", (signature,)
+            ).fetchone()
+            if assigned and assigned["id"] != order_id:
+                rollback(connection)
+                return order, PaymentVerification(
+                    "needs_review", signature=signature, reason="This transaction is already assigned to another checkout"
+                )
+            current = connection.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
+            if not current:
+                rollback(connection)
+                return order, PaymentVerification(
+                    "needs_review", signature=signature, reason="Checkout order not found"
+                )
+            if current["payment_signature"] and current["payment_signature"] != signature:
+                rollback(connection)
+                return order, PaymentVerification(
+                    "needs_review", signature=signature, reason="A different payment is already verified for this checkout"
+                )
+            status = {
+                "exact": "paid_exact",
+                "underpayment": "underpaid",
+                "overpayment": "overpaid",
+            }[verification.state]
+            now = iso_now()
+            derived_destination = current["refund_destination"] or verification.source_address or ""
+            derived_mode = current["refund_destination_mode"]
+            if not current["refund_destination"] and verification.source_address:
+                derived_mode = "derived_sender"
+            connection.execute(
+                """UPDATE orders SET status = ?, payment_signature = ?, payment_source_address = ?,
+                payment_lamports = ?, refund_destination = ?, refund_destination_mode = ?,
+                verified_at = ?, updated_at = ? WHERE id = ?""",
+                (
+                    status,
+                    signature,
+                    verification.source_address,
+                    verification.amount_lamports,
+                    derived_destination,
+                    derived_mode,
+                    now,
+                    now,
+                    order_id,
+                ),
+            )
+            commit(connection)
+        except sqlite3.IntegrityError:
+            rollback(connection)
+            return self.get_order(order_id), PaymentVerification(
+                "needs_review", signature=signature, reason="This payment could not be assigned safely"
+            )
+        except Exception:
+            rollback(connection)
+            raise
+        finally:
+            connection.close()
+        return self.get_order(order_id), verification
+
+    def _wallet_payment_rows(self) -> list[dict[str, Any]]:
+        connection = self._connection()
+        try:
+            rows = connection.execute(
+                """SELECT w.*, o.payment_address, o.price_lamports, o.product_id,
+                p.name AS product_name
+                FROM wallet_sessions w
+                JOIN orders o ON o.id = w.order_id
+                JOIN products p ON p.id = o.product_id
+                WHERE w.payment_signature IS NOT NULL
+                ORDER BY w.updated_at DESC"""
+            ).fetchall()
+            return [dict(row) for row in rows]
+        finally:
+            connection.close()
+
+    def refresh_payment_records(self) -> list[dict[str, Any]]:
+        """Refresh checkout payments from finalized Devnet RPC state.
+
+        The refresh is intentionally request-driven: it scans each unique
+        checkout address, verifies straightforward native SOL transfers, and
+        records only finalized payments. It never broadcasts or asks for a
+        recovery claim.
+        """
+        refresh_overrides: dict[str, dict[str, Any]] = {}
+        orders = self.list_orders()
+
+        # A Test Wallet can have a durable signed payment before a customer
+        # recovery claim exists. Reconcile those saved signatures first.
+        for wallet in self._wallet_payment_rows():
+            order = self.get_order(wallet["order_id"])
+            if not order or order.get("payment_signature"):
+                continue
+            signature = wallet["payment_signature"]
+            try:
+                chain_status = self.solana.signature_status(signature)
+            except Exception as error:
+                chain_status = "unknown"
+                reason = f"Payment status lookup failed: {error}"
+            else:
+                reason = wallet.get("last_error")
+            if chain_status == "finalized":
+                try:
+                    verification = self.solana.verify_payment(
+                        signature, order["payment_address"], order["price_lamports"]
+                    )
+                except Exception as error:
+                    verification = PaymentVerification(
+                        "needs_review", signature=signature, reason=f"Payment verification failed: {error}"
+                    )
+                if verification.state in {"exact", "underpayment", "overpayment"}:
+                    self.record_verified_payment(
+                        order["id"], verification, expected_sender=wallet["sender_address"]
+                    )
+                    continue
+                reason = verification.reason or reason
+            elif chain_status == "failed":
+                reason = "The saved payment transaction failed on Solana."
+            elif chain_status in {"confirmed", "processed"}:
+                reason = "The payment transaction is not finalized yet."
+            else:
+                reason = reason or "The saved payment signature was not found on Devnet."
+            refresh_overrides[order["id"]] = {
+                "payment_status": "failed" if chain_status == "failed" or wallet["status"] == "failed" else "needs_review",
+                "payment_signature": signature,
+                "sender_address": wallet["sender_address"],
+                "receiving_address": order["payment_address"],
+                "received_lamports": None,
+                "review_reason": reason,
+                "payment_timestamp": wallet.get("updated_at") or wallet.get("created_at"),
+            }
+
+        # Discover customer payments directly from each unique checkout
+        # address. Failed and unconfirmed attempts stay in their durable
+        # tracking records and never become merchant payment records.
+        for order in orders:
+            if order.get("payment_signature"):
+                try:
+                    chain_status = self.solana.signature_status(order["payment_signature"])
+                except Exception as error:
+                    refresh_overrides[order["id"]] = {
+                        "payment_status": "needs_review",
+                        "payment_signature": order["payment_signature"],
+                        "sender_address": order.get("payment_source_address"),
+                        "receiving_address": order["payment_address"],
+                        "received_lamports": order.get("payment_lamports"),
+                        "review_reason": f"Payment status lookup failed: {error}",
+                        "payment_timestamp": order.get("verified_at") or order.get("updated_at"),
+                    }
+                    continue
+                if chain_status == "finalized":
+                    try:
+                        verification = self.solana.verify_payment(
+                            order["payment_signature"], order["payment_address"], order["price_lamports"]
+                        )
+                    except Exception as error:
+                        verification = PaymentVerification(
+                            "needs_review", signature=order["payment_signature"], reason=f"Payment verification failed: {error}"
+                        )
+                    if verification.state in {"exact", "underpayment", "overpayment"}:
+                        self.record_verified_payment(order["id"], verification)
+                        continue
+                    refresh_overrides[order["id"]] = {
+                        "payment_status": "failed" if verification.state == "invalid" else "needs_review",
+                        "payment_signature": order["payment_signature"],
+                        "sender_address": order.get("payment_source_address"),
+                        "receiving_address": order["payment_address"],
+                        "received_lamports": order.get("payment_lamports"),
+                        "review_reason": verification.reason,
+                        "payment_timestamp": order.get("verified_at") or order.get("updated_at"),
+                    }
+                else:
+                    refresh_overrides[order["id"]] = {
+                        "payment_status": "pending" if chain_status in {"confirmed", "processed"} else "needs_review",
+                        "payment_signature": order["payment_signature"],
+                        "sender_address": order.get("payment_source_address"),
+                        "receiving_address": order["payment_address"],
+                        "received_lamports": order.get("payment_lamports"),
+                        "review_reason": "The payment transaction is not finalized yet." if chain_status in {"confirmed", "processed"} else "The saved payment signature was not found on Devnet.",
+                        "payment_timestamp": order.get("verified_at") or order.get("updated_at"),
+                    }
+                continue
+            try:
+                history = self.solana.get_signatures_for_address(order["payment_address"], limit=20)
+            except Exception as error:
+                refresh_overrides[order["id"]] = {
+                    "payment_status": "needs_review",
+                    "payment_signature": None,
+                    "sender_address": None,
+                    "receiving_address": order["payment_address"],
+                    "received_lamports": None,
+                    "review_reason": f"Payment refresh failed: {error}",
+                    "payment_timestamp": order.get("updated_at") or order.get("created_at"),
+                }
+                continue
+            if not history:
+                continue
+            failed = next((item for item in history if item.get("err") is not None), None)
+            candidate = next((item for item in history if item.get("err") is None), None)
+            if candidate:
+                signature = candidate.get("signature")
+                confirmation = candidate.get("confirmationStatus")
+                if confirmation in {"confirmed", "finalized"}:
+                    try:
+                        verification = self.solana.verify_payment(
+                            signature, order["payment_address"], order["price_lamports"]
+                        )
+                    except Exception as error:
+                        verification = PaymentVerification(
+                            "needs_review", signature=signature, reason=f"Payment verification failed: {error}"
+                        )
+                    if verification.state in {"exact", "underpayment", "overpayment"} and confirmation == "finalized":
+                        self.record_verified_payment(order["id"], verification)
+                        continue
+                    refresh_overrides[order["id"]] = {
+                        "payment_status": "pending" if confirmation != "finalized" else "needs_review",
+                        "payment_signature": signature,
+                        "sender_address": verification.source_address,
+                        "receiving_address": order["payment_address"],
+                        "received_lamports": verification.amount_lamports or None,
+                        "review_reason": verification.reason or "The payment is not finalized yet.",
+                        "payment_timestamp": order.get("updated_at") or order.get("created_at"),
+                    }
+            elif failed:
+                refresh_overrides[order["id"]] = {
+                    "payment_status": "failed",
+                    "payment_signature": failed.get("signature"),
+                    "sender_address": None,
+                    "receiving_address": order["payment_address"],
+                    "received_lamports": None,
+                    "review_reason": "The payment transaction failed on Solana.",
+                    "payment_timestamp": failed.get("blockTime") or order.get("updated_at") or order.get("created_at"),
+                }
+
+        refreshed = self.list_orders()
+        payments = []
+        for order in refreshed:
+            if not self._has_verified_payment(order):
+                continue
+            value = dict(order)
+            value["expected_lamports"] = order["price_lamports"]
+            value["expected_sol"] = sol_from_lamports(order["price_lamports"])
+            value["received_lamports"] = order.get("payment_lamports")
+            value["received_sol"] = sol_from_lamports(order.get("payment_lamports"))
+            value["sender_address"] = order.get("payment_source_address")
+            value["receiving_address"] = order["payment_address"]
+            value["payment_timestamp"] = order.get("verified_at") or order.get("updated_at") or order.get("created_at")
+            value["review_reason"] = None
+            value["payment_signature"] = order.get("payment_signature")
+            value["payment_status"] = self._verified_payment_status(order)
+            value["received_sol"] = sol_from_lamports(value.get("received_lamports"))
+            payments.append(value)
+        return payments
+
+    def merchant_ledger(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        return self.refresh_payment_records(), self.list_refunds()
 
     def _authorize(self, order: dict[str, Any] | None, claim_code: str) -> dict[str, Any]:
         if not order or not claim_code or not verify_claim_code(claim_code.strip(), order["claim_code_hash"]):
             raise AuthorizationError()
         return order
 
-    def verify_payment(self, order_id: str, claim_code: str, signature: str) -> tuple[dict[str, Any], PaymentVerification]:
+    def verify_payment(
+        self,
+        order_id: str,
+        claim_code: str,
+        signature: str,
+        expected_sender: str | None = None,
+    ) -> tuple[dict[str, Any], PaymentVerification]:
         order = self._authorize(self.get_order(order_id), claim_code)
         if order["status"] == "awaiting_payment" and order["expires_at"] < iso_now():
             connection = self._connection()
@@ -306,6 +879,21 @@ class PaymentEngine:
         verification = self.solana.verify_payment(signature, order["payment_address"], order["price_lamports"])
         if verification.state not in {"exact", "underpayment", "overpayment"}:
             return order, verification
+        if expected_sender and verification.source_address != expected_sender:
+            return order, PaymentVerification(
+                "invalid",
+                signature=signature,
+                reason="The payment details could not be verified",
+            )
+        if (
+            order.get("refund_destination_mode") == "internal_demo"
+            and order.get("refund_destination") != verification.source_address
+        ):
+            return order, PaymentVerification(
+                "needs_review",
+                signature=signature,
+                reason="The controlled demo wallet was not the verified payment sender",
+            )
 
         connection = self._connection()
         try:
@@ -326,14 +914,21 @@ class PaymentEngine:
                 "overpayment": "overpaid",
             }[verification.state]
             now = iso_now()
+            derived_destination = current["refund_destination"] or verification.source_address or ""
+            derived_mode = current["refund_destination_mode"]
+            if not current["refund_destination"] and verification.source_address:
+                derived_mode = "derived_sender"
             connection.execute(
                 """UPDATE orders SET status = ?, payment_signature = ?, payment_source_address = ?,
-                payment_lamports = ?, verified_at = ?, updated_at = ? WHERE id = ?""",
+                payment_lamports = ?, refund_destination = ?, refund_destination_mode = ?,
+                verified_at = ?, updated_at = ? WHERE id = ?""",
                 (
                     status,
                     signature,
                     verification.source_address,
                     verification.amount_lamports,
+                    derived_destination,
+                    derived_mode,
                     now,
                     now,
                     order_id,
@@ -350,6 +945,33 @@ class PaymentEngine:
             connection.close()
         return self.get_order(order_id), verification
 
+    def check_refund_eligibility_by_code(
+        self, merchant_code: str, sender_address: str, signature: str
+    ) -> tuple[dict[str, Any], str]:
+        """Verify recovery using the code, sender, destination, and chain transaction."""
+        order = self.get_order_by_merchant_code(merchant_code)
+        if not order:
+            raise AuthorizationError()
+        order, verification = self.verify_payment(
+            order["id"], merchant_code, signature, expected_sender=sender_address
+        )
+        if verification.state in {"invalid", "needs_review"}:
+            return order, "not_eligible" if verification.state == "invalid" else "needs_review"
+        order = self.get_order(order["id"])
+        if order.get("refund_status"):
+            return order, order["refund_status"]
+        if order["status"] == "overpaid":
+            if not order.get("refund_destination") or not order.get("sender_ownership_verified"):
+                return order, "needs_review"
+            return order, "eligible"
+        if order["status"] == "underpaid":
+            return order, "underpaid"
+        if order["status"] == "paid_exact":
+            return order, "exact"
+        if order["status"] in {"needs_review", "expired"}:
+            return order, "needs_review"
+        return order, "not_eligible"
+
     def check_refund_eligibility(
         self, reference: str, claim_code: str, signature: str
     ) -> tuple[dict[str, Any], str]:
@@ -365,6 +987,8 @@ class PaymentEngine:
         if order.get("refund_status"):
             return order, order["refund_status"]
         if order["status"] == "overpaid":
+            if not order.get("refund_destination") or not order.get("sender_ownership_verified"):
+                return order, "needs_review"
             return order, "eligible"
         if order["status"] == "underpaid":
             return order, "underpaid"
@@ -379,11 +1003,21 @@ class PaymentEngine:
     ) -> tuple[dict[str, Any], str]:
         order, eligibility = self.check_refund_eligibility(reference, claim_code, signature)
         if eligibility == "needs_review" and not order.get("refund_id"):
-            raise DomainError(self._eligibility_message(eligibility), "needs_review")
+            return self._create_review_refund(
+                order,
+                order["excess_lamports"],
+                self._eligibility_message(eligibility),
+            )
         if eligibility not in {"eligible", "authorized", "broadcast", "submitted", "finalized", "needs_review"}:
             raise DomainError(self._eligibility_message(eligibility), "not_eligible")
         if order.get("refund_id"):
             return self.reconcile_refund(order["refund_id"])
+        if not order.get("refund_destination"):
+            return self._create_review_refund(
+                order,
+                order["excess_lamports"],
+                "The verified sender could not be prepared as an automatic refund destination; manual review is required.",
+            )
 
         amount = order["excess_lamports"]
         try:
@@ -469,6 +1103,17 @@ class PaymentEngine:
         self._update_refund(refund_id, "submitted")
         return self.reconcile_refund(refund_id)
 
+    def request_refund_by_code(
+        self, merchant_code: str, sender_address: str, signature: str
+    ) -> tuple[dict[str, Any], str]:
+        """Run sender-bound recovery, then reuse the durable refund state machine."""
+        order, eligibility = self.check_refund_eligibility_by_code(
+            merchant_code, sender_address, signature
+        )
+        if eligibility == "not_eligible":
+            raise DomainError("The payment details could not be verified.", "not_eligible")
+        return self.request_refund(order["id"], merchant_code, signature)
+
     def _create_review_refund(self, order: dict[str, Any], amount: int, reason: str):
         connection = self._connection()
         now = iso_now()
@@ -479,10 +1124,11 @@ class PaymentEngine:
                 rollback(connection)
                 return self.reconcile_refund(existing["id"])
             refund_id = str(uuid.uuid4())
+            destination = order.get("refund_destination") or order.get("payment_source_address") or ""
             connection.execute(
                 """INSERT INTO refunds (id, order_id, amount_lamports, destination, status, last_error, created_at, updated_at)
                 VALUES (?, ?, ?, ?, 'needs_review', ?, ?, ?)""",
-                (refund_id, order["id"], amount, order["refund_destination"], reason, now, now),
+                (refund_id, order["id"], amount, destination, reason, now, now),
             )
             connection.execute(
                 "UPDATE orders SET status = 'needs_review', updated_at = ? WHERE id = ?",

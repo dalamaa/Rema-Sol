@@ -47,3 +47,28 @@ Refund signatures:
 - Invalid-request refund-row count: unchanged.
 
 No mainnet or local-validator transactions are included here.
+
+## Unresolved Test Wallet session (read-only investigation)
+
+The existing local database contains one failed Test Wallet session whose sender is
+`Da3JXX5arbu2ZW3bS1TzfVzezDPMaLf6pgn8A9vW1SVp`. A read-only Devnet balance lookup
+reported `5,100,000` lamports (`0.0051 SOL`) in that sender. The local record has
+the same `5,100,000`-lamport funding allocation, the saved funding signature
+`LvAFDPw2pUDa2gUBZa88k8UGHjW2LMNi6iGeTt1XvnMuZ4Bejit9LgzyJSRd7PuELMZbJSWjPmnyN6ysiq9NKR5`,
+and the saved payment signature
+`3GD117cevkH2AbDQf55EwbCY8B8Qju6bVWsyT19BwLZ2yD3DYNDfKyWyo7GPxkQA1MZG2PvuRfnkHafbeVhQyD8S`.
+The local status says the payment signature was not found after treasury funding;
+the current read-only RPC status for both saved signatures is `unknown`.
+
+The funds are intentionally preserved. No sweep, transfer, rebroadcast, or private
+key export was performed. The safe recovery plan is:
+
+1. Keep the wallet row, encrypted key, signed candidates, and history immutable
+   while read-only RPC reconciliation is retried.
+2. Confirm the funding and payment outcomes and the sender balance from Devnet.
+   Treat an unknown signature as unresolved, never as permission to retry.
+3. Obtain explicit operator approval for the recovery destination and amount.
+   After approval, create exactly one fee-aware recovery transaction, persist its
+   signed bytes and expected signature before broadcasting, then reconcile it to
+   finality. If approval or chain evidence is missing, leave the 0.0051 SOL in
+   the sender wallet.
