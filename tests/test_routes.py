@@ -53,7 +53,18 @@ def test_shared_public_navigation_and_compact_product_cta(client, product):
     assert "product-secondary" in product_html
 
     demo_html = client.get("/demo").get_data(as_text=True)
+    assert "Send too much SOL. Get the extra back." in demo_html
+    assert "See how RemaSol helps customers recover eligible overpayments without a support ticket." in demo_html
+    assert 'href="#lifecycle">How It Works' in demo_html
     assert 'target="_blank" rel="noopener noreferrer"' in demo_html
+    assert demo_html.count('target="_blank" rel="noopener noreferrer"') == 4
+    for label in ("Product price", "Amount sent", "Eligible excess", "Checkout", "Pay", "Recover", "Refund"):
+        assert label in demo_html
+    assert "0.002" in demo_html
+    assert "0.005" in demo_html
+    assert "0.003" in demo_html
+    assert "Illustrative only" in demo_html
+    assert "no refund has occurred" in demo_html
 
 
 def test_authenticated_navigation_exposes_merchant_sections(client):
@@ -206,7 +217,7 @@ def test_test_wallet_is_separate_and_only_sends_to_active_checkouts(client, app,
     token = csrf(client)
     demo_page = client.get("/demo")
     assert demo_page.status_code == 200
-    assert "From Overpayment to Refund" in demo_page.get_data(as_text=True)
+    assert "Send too much SOL. Get the extra back." in demo_page.get_data(as_text=True)
     assert "Merchant Code" not in client.get("/wallet").get_data(as_text=True)
 
     created = client.post("/wallet/create", data={"csrf_token": token})
