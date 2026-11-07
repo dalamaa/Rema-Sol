@@ -15,8 +15,7 @@
   </div>
 
   <div class="product-copy">
-    <a class="back-link" href="{{ url_for('main.home') }}">{{ icon('arrow-right', 15) }} RemaSol storefront</a>
-    <div class="product-eyebrow">Digital ebook · Solana Devnet</div>
+    <div class="product-eyebrow">Digital ebook</div>
     <h1>{{ product.name|replace("'", "’") }}</h1>
     <p class="product-description">{{ product.description or 'A clear, practical field guide for turning your creative work into a durable digital practice.' }}</p>
 
@@ -25,19 +24,22 @@
       <span class="product-format">PDF / digital edition</span>
     </div>
 
-    <ul class="benefit-list" aria-label="What you’ll get">
-      <li><span class="benefit-check">{{ icon('check', 15) }}</span><span>Build a focused creative practice around the work that matters to you.</span></li>
-      <li><span class="benefit-check">{{ icon('check', 15) }}</span><span>Turn ideas into repeatable content, offers, and momentum.</span></li>
-      <li><span class="benefit-check">{{ icon('check', 15) }}</span><span>Use simple prompts to make your next launch feel more intentional.</span></li>
-    </ul>
-
     {% if error %}<div class="inline-error" role="alert">{{ icon('alert', 15) }} {{ error }}</div>{% endif %}
     <form method="post" action="{{ url_for('main.create_checkout', slug=product.slug) }}" class="product-cta-form" data-loading-text="Opening checkout…">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <button class="button button-primary product-cta" type="submit">Buy with SOL {{ icon('arrow-right', 17) }}</button>
     </form>
+    <div class="product-purchase-meta"><span class="product-network-label">{{ icon('shield', 14) }} Solana Devnet</span></div>
     <p class="product-note">A private checkout room is created next with the exact payment address and your private claim code.</p>
   </div>
+</section>
+
+<section class="product-secondary section-wrap" aria-label="What you’ll get">
+  <ul class="benefit-list">
+    <li><span class="benefit-check">{{ icon('check', 15) }}</span><span>Build a focused creative practice around the work that matters to you.</span></li>
+    <li><span class="benefit-check">{{ icon('check', 15) }}</span><span>Turn ideas into repeatable content, offers, and momentum.</span></li>
+    <li><span class="benefit-check">{{ icon('check', 15) }}</span><span>Use simple prompts to make your next launch feel more intentional.</span></li>
+  </ul>
 </section>
 
 <section class="product-detail-strip section-wrap" aria-label="Product details">

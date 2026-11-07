@@ -34,6 +34,31 @@
   const walletForm = document.querySelector(".wallet-send-form[data-wallet-payment]");
   const resultPanel = document.querySelector("[data-wallet-result]");
   const errorRegion = document.querySelector("[data-wallet-error]");
+  const siteNav = document.querySelector("[data-site-nav]");
+  const navToggle = siteNav?.querySelector(".nav-toggle");
+
+  const closeSiteNav = () => {
+    if (!siteNav || !navToggle) return;
+    siteNav.classList.remove("is-open");
+    navToggle.setAttribute("aria-expanded", "false");
+  };
+
+  if (siteNav && navToggle) {
+    navToggle.addEventListener("click", () => {
+      const isOpen = siteNav.classList.toggle("is-open");
+      navToggle.setAttribute("aria-expanded", String(isOpen));
+    });
+    siteNav.querySelectorAll("a").forEach((link) => link.addEventListener("click", closeSiteNav));
+    document.addEventListener("click", (event) => {
+      if (!siteNav.contains(event.target)) closeSiteNav();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        closeSiteNav();
+        navToggle.focus();
+      }
+    });
+  }
 
   const setWalletError = (message) => {
     if (!errorRegion) return;

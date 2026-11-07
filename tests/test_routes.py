@@ -29,6 +29,47 @@ def test_home_and_merchant_pages_render(client):
     assert client.get("/merchant").status_code == 200
 
 
+def test_shared_public_navigation_and_compact_product_cta(client, product):
+    expected_links = (
+        'href="/"',
+        'href="/demo"',
+        'href="/p/the-digital-creator-s-guide"',
+        'href="/wallet"',
+        'href="/recover"',
+    )
+    for path in ("/", "/demo", f"/p/{product['slug']}", "/wallet", "/recover"):
+        html = client.get(path).get_data(as_text=True)
+        nav = re.search(r'<nav class="main-nav".*?</nav>', html, re.S).group(0)
+        assert "data-site-nav" in nav
+        assert 'aria-controls="site-nav-panel"' in nav
+        assert all(link in nav for link in expected_links)
+        assert 'target="_blank"' not in nav
+        assert "Merchant Login" in nav
+
+    product_html = client.get(f"/p/{product['slug']}").get_data(as_text=True)
+    assert product_html.count("Buy with SOL") == 1
+    assert "Solana Devnet" in product_html
+    assert "RemaSol storefront" not in product_html
+    assert "product-secondary" in product_html
+
+    demo_html = client.get("/demo").get_data(as_text=True)
+    assert 'target="_blank" rel="noopener noreferrer"' in demo_html
+
+
+def test_authenticated_navigation_exposes_merchant_sections(client):
+    login(client)
+    dashboard = client.get("/merchant").get_data(as_text=True)
+    nav = re.search(r'<nav class="main-nav".*?</nav>', dashboard, re.S).group(0)
+    assert 'href="/merchant">Dashboard' in nav
+    assert 'href="/merchant#payments">Payments' in nav
+    assert 'href="/merchant#refunds">Refunds' in nav
+    assert 'href="/merchant/treasury">Treasury' in nav
+    assert "Logout" in nav
+    assert "Merchant Login" not in nav
+    assert 'id="payments"' in dashboard
+    assert 'id="refunds"' in dashboard
+
+
 def test_merchant_product_route_requires_login_and_creates_product(client):
     token = csrf(client)
     response = client.post(

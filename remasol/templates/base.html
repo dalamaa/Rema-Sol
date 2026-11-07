@@ -20,21 +20,39 @@
         <span class="brand-mark"><span></span></span>
         <span>Rema<span>Sol</span></span>
       </a>
-      <nav class="main-nav" aria-label="Primary navigation">
-        <a href="{{ url_for('main.test_wallet') }}">Test Wallet</a>
-        <a href="{{ url_for('main.merchant_dashboard') if merchant_authenticated else url_for('main.merchant_login') }}">Merchant console</a>
-        <a href="{{ url_for('main.recover') }}">Recover a payment</a>
+      <nav class="main-nav" data-site-nav aria-label="Primary navigation">
+        <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav-panel">
+          {{ icon('menu', 18) }}<span>Menu</span>
+        </button>
+        <div class="main-nav-panel" id="site-nav-panel">
+          <div class="nav-primary">
+            <a class="{{ 'is-active' if request.endpoint == 'main.home' else '' }}" href="{{ url_for('main.home') }}">Home</a>
+            <a class="{{ 'is-active' if request.endpoint == 'main.demo_wallet' else '' }}" href="{{ url_for('main.demo_wallet') }}">Demo</a>
+            <a class="{{ 'is-active' if request.path.startswith('/p/') or request.path.startswith('/checkout/') else '' }}" href="{{ url_for('main.product_checkout', slug='the-digital-creator-s-guide') }}">Ebook</a>
+            <a class="{{ 'is-active' if request.path.startswith('/wallet') else '' }}" href="{{ url_for('main.test_wallet') }}">Test Wallet</a>
+            <a class="{{ 'is-active' if request.path.startswith('/recover') or request.path.startswith('/receipt') else '' }}" href="{{ url_for('main.recover') }}">Recover</a>
+          </div>
+          <div class="nav-merchant">
+            <span class="nav-divider" aria-hidden="true"></span>
+            {% if merchant_authenticated %}
+              <a class="{{ 'is-active' if request.endpoint == 'main.merchant_dashboard' else '' }}" href="{{ url_for('main.merchant_dashboard') }}">Dashboard</a>
+              <a href="{{ url_for('main.merchant_dashboard') }}#payments">Payments</a>
+              <a href="{{ url_for('main.merchant_dashboard') }}#refunds">Refunds</a>
+              <a class="{{ 'is-active' if request.endpoint == 'main.merchant_treasury' else '' }}" href="{{ url_for('main.merchant_treasury') }}">Treasury</a>
+              <form class="nav-logout-form" method="post" action="{{ url_for('main.merchant_logout') }}" data-loading-text="Logging out…">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button class="nav-logout" type="submit">Logout</button>
+              </form>
+            {% else %}
+              <a class="nav-login {{ 'is-active' if request.endpoint == 'main.merchant_login' else '' }}" href="{{ url_for('main.merchant_login') }}">Merchant Login</a>
+            {% endif %}
+          </div>
+        </div>
       </nav>
       <div class="topbar-actions">
         <span class="network-pill"><span class="network-dot"></span> Devnet</span>
-        {% if request.endpoint not in ['main.merchant_dashboard', 'main.merchant_login'] %}<a class="button button-small button-quiet" href="{{ url_for('main.merchant_dashboard') if merchant_authenticated else url_for('main.merchant_login') }}">Open console {{ icon('arrow-up-right', 15) }}</a>{% endif %}
       </div>
     </header>
-    <nav class="mobile-nav section-wrap" aria-label="Mobile navigation">
-      <a href="{{ url_for('main.test_wallet') }}">Test Wallet</a>
-      <a href="{{ url_for('main.merchant_dashboard') if merchant_authenticated else url_for('main.merchant_login') }}">Merchant console</a>
-      <a href="{{ url_for('main.recover') }}">Recover a payment</a>
-    </nav>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
