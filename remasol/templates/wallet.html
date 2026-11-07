@@ -10,7 +10,7 @@
 </section>
 
 <section class="wallet-layout section-wrap">
-  {% if error %}<div class="wallet-error inline-error" role="alert">{{ icon('alert', 15) }} {{ error }}</div>{% endif %}
+  <div class="wallet-error inline-error" data-wallet-error role="alert" {% if not error %}hidden{% endif %}>{{ icon('alert', 15) }} <span>{% if error %}{{ error }}{% endif %}</span></div>
   {% if not wallet %}
     <div class="wallet-start panel">
       <div class="wallet-credit wallet-credit-entry"><span>Maximum Test Payment</span><strong>{{ max_payment_sol }} <small>SOL</small></strong><p>Free Devnet SOL is available for testing. This maximum resets for every payment.</p></div>
@@ -31,7 +31,7 @@
 
       <div class="panel wallet-send-card">
         <div class="panel-heading"><div><span class="panel-kicker">Payment tool</span><h2>Send Test SOL</h2></div><span class="demo-limit">max {{ max_payment_sol }} SOL</span></div>
-        <form method="post" action="{{ url_for('main.send_test_wallet_payment') }}" class="wallet-send-form" data-loading-text="Funding and sending…">
+        <form method="post" action="{{ url_for('main.send_test_wallet_payment') }}" class="wallet-send-form" data-wallet-payment>
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <input type="hidden" name="session_id" value="{{ wallet.id }}">
           <label for="wallet-recipient">RemaSol checkout address<input id="wallet-recipient" name="recipient_address" value="{{ wallet.recipient_address or '' }}" placeholder="Paste the unique payment address from checkout" autocomplete="off" spellcheck="false" required><span class="field-hint">This field is blank for every New Test. External wallets are rejected; the server checks that this is an active RemaSol checkout.</span></label>
@@ -49,21 +49,21 @@
     </div>
 
     <aside class="wallet-result-column">
-      <div class="panel wallet-result-card" aria-live="polite">
+      <div class="panel wallet-result-card" aria-live="polite" data-wallet-result data-new-test-action="{{ url_for('main.create_test_wallet') }}" data-recheck-action="{{ url_for('main.recheck_test_wallet_payment') }}" data-csrf-token="{{ csrf_token }}">
         <div class="panel-kicker">Payment result</div>
-        {% if wallet.payment_signature %}
-          <div class="demo-result-icon {{ 'success' if wallet.status == 'complete' else 'pending' }}">{{ icon('check' if wallet.status == 'complete' else 'clock', 21) }}</div>
-          <h2>{% if wallet.status == 'complete' %}Payment confirmed{% elif wallet.status == 'failed' %}Payment failed{% elif wallet.status == 'needs_review' %}Payment needs review{% else %}Payment in progress{% endif %}</h2>
-          <p>{% if wallet.status == 'complete' %}The Devnet transfer is finalized and recorded below. {% elif wallet.status == 'failed' %}The payment did not reach the checkout. This saved attempt will not be sent again. {% elif wallet.status == 'needs_review' %}The saved payment signature is being checked without creating a new transfer. {% else %}The signed transfer is waiting for finalization. {% endif %}</p>
-          <div class="wallet-result-details">
+        {% if wallet.status != 'created' or wallet.payment_signature %}
+          <div class="demo-result-icon {{ 'success' if wallet.status == 'complete' else 'pending' if wallet.status not in ['failed', 'needs_review'] else 'failed' }}" aria-hidden="true">{{ icon('check' if wallet.status == 'complete' else 'alert' if wallet.status in ['failed', 'needs_review'] else 'clock', 21) }}</div>
+          <h2>{% if wallet.status == 'complete' %}Payment confirmed{% elif wallet.status == 'failed' %}Payment failed{% elif wallet.status == 'needs_review' %}Payment needs review{% else %}Processing{% endif %}</h2>
+          <p>{% if wallet.status == 'complete' %}The Devnet transfer is finalized and recorded below. {% elif wallet.status == 'failed' %}The payment did not reach the checkout. This saved attempt will not be sent again. {% elif wallet.status == 'needs_review' %}The saved payment transaction is being checked without creating a new transfer. {% else %}Payment in progress. The transfer is being checked before it is confirmed. {% endif %}</p>
+          {% if wallet.payment_signature %}<div class="wallet-result-details">
             <div><span>Actual sender</span><code>{{ wallet.sender_address }}</code><button type="button" class="copy-button" data-copy="{{ wallet.sender_address }}" aria-label="Copy actual sender address">{{ icon('copy', 14) }} Copy</button></div>
             <div><span>Recipient</span><code>{{ wallet.recipient_address }}</code><button type="button" class="copy-button" data-copy="{{ wallet.recipient_address }}" aria-label="Copy recipient address">{{ icon('copy', 14) }} Copy</button></div>
             <div><span>Amount</span><strong>{{ wallet.selected_sol }} SOL</strong></div>
             <div><span>Transaction ID</span><code>{{ wallet.payment_signature }}</code><button type="button" class="copy-button" data-copy="{{ wallet.payment_signature }}" aria-label="Copy transaction ID">{{ icon('copy', 14) }} Copy</button></div>
           </div>
-          <a class="button button-quiet button-full" href="https://explorer.solana.com/tx/{{ wallet.payment_signature }}?cluster=devnet" target="_blank" rel="noreferrer">Open on Solana Explorer {{ icon('external', 14) }}</a>
+          <a class="button button-quiet button-full" href="https://explorer.solana.com/tx/{{ wallet.payment_signature }}?cluster=devnet" target="_blank" rel="noreferrer">Open on Solana Explorer {{ icon('external', 14) }}</a>{% elif wallet.last_error %}<div class="wallet-result-message">{{ wallet.last_error }}</div>{% endif %}
           {% if wallet.status in ['complete', 'failed', 'needs_review'] %}<form method="post" action="{{ url_for('main.create_test_wallet') }}" data-loading-text="Creating New Test…"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="button button-primary button-full" type="submit">New Test {{ icon('arrow-right', 14) }}</button></form>{% endif %}
-          {% if wallet.status == 'needs_review' %}<form method="post" action="{{ url_for('main.recheck_test_wallet_payment') }}" data-loading-text="Rechecking Devnet…"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="session_id" value="{{ wallet.id }}"><button class="button button-primary button-full" type="submit">Recheck Payment Status {{ icon('refresh', 14) }}</button></form>{% endif %}
+          {% if wallet.status == 'needs_review' and wallet.payment_signature %}<form method="post" action="{{ url_for('main.recheck_test_wallet_payment') }}" data-wallet-recheck><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="session_id" value="{{ wallet.id }}"><button class="button button-primary button-full" type="submit">Recheck Payment Status {{ icon('refresh', 14) }}</button></form>{% endif %}
         {% else %}
           <div class="demo-result-placeholder"><div class="placeholder-orbit">{{ icon('wallet', 23) }}</div><h2>Your transaction will appear here.</h2><p>Enter an active RemaSol checkout address and choose how much test SOL to send.</p></div>
         {% endif %}

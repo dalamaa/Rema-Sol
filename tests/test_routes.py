@@ -146,6 +146,9 @@ def test_test_wallet_is_separate_and_only_sends_to_active_checkouts(client, app,
     wallet_html = client.get(test_url).get_data(as_text=True)
     for preset in ("0.001", "0.002", "0.004", "0.005"):
         assert preset in wallet_html
+    assert 'data-wallet-payment' in wallet_html
+    assert 'data-wallet-result' in wallet_html
+    assert "Funding and sending" not in wallet_html
     with client.session_transaction() as session:
         token = session["csrf_token"]
         wallet_browser_id = session["wallet_browser_id"]
@@ -297,6 +300,69 @@ def test_uncertain_wallet_payment_recheck_never_broadcasts_again(client, engine,
     failed = client.post("/wallet/recheck", data={"csrf_token": token, "session_id": session_id}, follow_redirects=True)
     assert failed.status_code == 200
     assert "Payment failed" in failed.get_data(as_text=True)
+    assert fake_solana.broadcast_calls == 2
+
+
+def test_test_wallet_fetch_returns_json_without_navigation(client, app, engine, product, fake_solana):
+    token = csrf(client)
+    created = client.post("/wallet/create", data={"csrf_token": token})
+    session_id = created.location.rsplit("/", 1)[-1]
+    order, _claim_code = engine.create_order_draft(product["slug"], "127.0.0.1")
+
+    response = client.post(
+        "/wallet/send",
+        data={
+            "csrf_token": token,
+            "session_id": session_id,
+            "recipient_address": order["payment_address"],
+            "amount": "0.005",
+        },
+        headers={"Accept": "application/json", "X-Requested-With": "fetch"},
+    )
+
+    assert response.status_code == 200
+    assert response.location is None
+    assert response.is_json
+    payload = response.get_json()
+    assert payload["ok"] is True
+    assert payload["status"] == "complete"
+    assert payload["status_label"] == "Confirmed"
+    assert payload["wallet"]["payment_signature"] == "transfer-signature-2"
+    assert "funding_signature" not in payload["wallet"]
+    assert fake_solana.broadcast_calls == 2
+
+
+def test_test_wallet_fetch_recheck_uses_saved_payment_without_broadcast(client, engine, product, fake_solana):
+    token = csrf(client)
+    created = client.post("/wallet/create", data={"csrf_token": token})
+    session_id = created.location.rsplit("/", 1)[-1]
+    order, _claim_code = engine.create_order_draft(product["slug"], "127.0.0.1")
+    fake_solana.broadcast_fail_calls = {2}
+    fake_solana.signature_statuses["transfer-signature-2"] = "unknown"
+    headers = {"Accept": "application/json", "X-Requested-With": "fetch"}
+
+    sent = client.post(
+        "/wallet/send",
+        data={
+            "csrf_token": token,
+            "session_id": session_id,
+            "recipient_address": order["payment_address"],
+            "amount": "0.005",
+        },
+        headers=headers,
+    )
+    assert sent.status_code == 200
+    assert sent.get_json()["status"] == "needs_review"
+    assert sent.get_json()["wallet"]["payment_signature"] == "transfer-signature-2"
+    assert fake_solana.broadcast_calls == 2
+
+    rechecked = client.post(
+        "/wallet/recheck",
+        data={"csrf_token": token, "session_id": session_id},
+        headers=headers,
+    )
+    assert rechecked.status_code == 200
+    assert rechecked.get_json()["status"] == "needs_review"
     assert fake_solana.broadcast_calls == 2
 
 

@@ -7,6 +7,7 @@ from flask import (
     abort,
     current_app,
     flash,
+    jsonify,
     redirect,
     render_template,
     request,
@@ -83,6 +84,41 @@ def render_domain_error(template: str, error: DomainError, **values):
     return render_template(template, **template_context(**values)), 400
 
 
+def wallet_json_request() -> bool:
+    """Return whether the Test Wallet asked for its same-page response format."""
+    return request.headers.get("X-Requested-With") == "fetch" or (
+        request.accept_mimetypes.best == "application/json"
+    )
+
+
+def wallet_json_response(wallet: dict | None, *, error: str | None = None, status_code: int = 200):
+    """Expose only the wallet fields the browser needs to render its result."""
+    public_wallet = None
+    if wallet:
+        public_wallet = {
+            "id": wallet.get("id"),
+            "status": wallet.get("status"),
+            "sender_address": wallet.get("sender_address"),
+            "recipient_address": wallet.get("recipient_address"),
+            "selected_sol": wallet.get("selected_sol"),
+            "payment_signature": wallet.get("payment_signature"),
+            "last_error": wallet.get("last_error"),
+        }
+    status = public_wallet.get("status") if public_wallet else None
+    return jsonify(
+        {
+            "ok": error is None,
+            "wallet": public_wallet,
+            "status": status,
+            "status_label": status_label(status) if status else None,
+            "error": error,
+            "explorer_url": explorer_url(public_wallet.get("payment_signature"))
+            if public_wallet
+            else None,
+        }
+    ), status_code
+
+
 @bp.app_template_filter("sol")
 def sol_filter(value):
     return sol_from_lamports(value)
@@ -99,6 +135,7 @@ def short_filter(value):
 @bp.app_template_filter("status_label")
 def status_label(value):
     return {
+        "created": "Ready to send",
         "awaiting_payment": "Awaiting payment",
         "paid_exact": "Paid",
         "paid": "Paid",
@@ -109,11 +146,14 @@ def status_label(value):
         "exact": "Exact",
         "failed": "Failed",
         "payment_pending": "Payment in progress",
-        "complete": "Successful",
+        "funding": "Payment in progress",
+        "funding_pending": "Payment in progress",
+        "funded": "Payment in progress",
+        "complete": "Confirmed",
         "refund_processing": "Refund processing",
         "refund_submitted": "Refund submitted",
         "refund_finalized": "Refund finalized",
-        "needs_review": "Needs review",
+        "needs_review": "Needs Review",
         "authorized": "Reserved",
         "submitted": "Submitted",
         "finalized": "Finalized",
@@ -355,11 +395,18 @@ def create_test_wallet():
 
 @bp.post("/wallet/send")
 def send_test_wallet_payment():
+    wants_json = wallet_json_request()
     if not csrf_ok():
         abort(400)
     requested_session_id = request.form.get("session_id", "").strip()
     if not requested_session_id:
         state = demo_service().wallet_page_state(wallet_browser_id())
+        if wants_json:
+            return wallet_json_response(
+                state.get("wallet"),
+                error="Open a New Test before sending test SOL.",
+                status_code=400,
+            )
         return render_template(
             "wallet.html",
             **state,
@@ -370,6 +417,12 @@ def send_test_wallet_payment():
         state = demo_service().wallet_page_state(
             wallet_browser_id(), requested_session_id, include_terminal=True
         )
+        if wants_json:
+            return wallet_json_response(
+                state.get("wallet"),
+                error="Test payment attempts are temporarily rate-limited. Try again shortly.",
+                status_code=429,
+            )
         return render_template(
             "wallet.html",
             **state,
@@ -388,17 +441,28 @@ def send_test_wallet_payment():
         state = demo_service().wallet_page_state(
             wallet_browser_id(), requested_session_id, include_terminal=True
         )
+        if wants_json:
+            return wallet_json_response(state.get("wallet"), error=str(error), status_code=400)
         return render_template("wallet.html", **state, error=str(error), **template_context()), 400
+    if wants_json:
+        return wallet_json_response(wallet)
     return redirect(url_for("main.wallet_test", session_id=wallet["id"]))
 
 
 @bp.post("/wallet/recheck")
 def recheck_test_wallet_payment():
+    wants_json = wallet_json_request()
     if not csrf_ok():
         abort(400)
     requested_session_id = request.form.get("session_id", "").strip()
     if not requested_session_id:
         state = demo_service().wallet_page_state(wallet_browser_id())
+        if wants_json:
+            return wallet_json_response(
+                state.get("wallet"),
+                error="Open a saved Test Wallet session before checking payment status.",
+                status_code=400,
+            )
         return render_template(
             "wallet.html",
             **state,
@@ -409,6 +473,12 @@ def recheck_test_wallet_payment():
         state = demo_service().wallet_page_state(
             wallet_browser_id(), requested_session_id, include_terminal=True
         )
+        if wants_json:
+            return wallet_json_response(
+                state.get("wallet"),
+                error="Payment status checks are temporarily rate-limited. Try again shortly.",
+                status_code=429,
+            )
         return render_template(
             "wallet.html",
             **state,
@@ -423,7 +493,11 @@ def recheck_test_wallet_payment():
         state = demo_service().wallet_page_state(
             wallet_browser_id(), requested_session_id, include_terminal=True
         )
+        if wants_json:
+            return wallet_json_response(state.get("wallet"), error=str(error), status_code=400)
         return render_template("wallet.html", **state, error=str(error), **template_context()), 400
+    if wants_json:
+        return wallet_json_response(wallet)
     return redirect(url_for("main.wallet_test", session_id=wallet["id"]))
 
 

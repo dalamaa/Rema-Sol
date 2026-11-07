@@ -225,7 +225,7 @@ td strong { color: var(--text); font-size: 13px; font-weight: 500; }
 .status-overpaid > span, .status-overpayment > span, .status-eligible > span { background: var(--gold); }
 .status-refund_finalized, .status-finalized, .status-paid_exact, .status-paid, .status-exact, .status-refunded, .status-complete { color: var(--green); border-color: rgba(85, 213, 155, .3); background: rgba(85, 213, 155, .06); }
 .status-refund_finalized > span, .status-finalized > span, .status-paid_exact > span, .status-paid > span, .status-exact > span, .status-refunded > span, .status-complete > span { background: var(--green); }
-.status-pending, .status-payment_pending { color: var(--muted); }
+.status-pending, .status-funding, .status-funding_pending, .status-funded, .status-payment_pending { color: var(--muted); }
 .status-needs_review, .status-underpaid { color: var(--warning); border-color: rgba(240, 198, 109, .28); background: rgba(240, 198, 109, .06); }
 .status-needs_review > span, .status-underpaid > span { background: var(--warning); }
 .status-refund_submitted, .status-submitted, .status-refund_processing { color: var(--violet); border-color: rgba(169, 147, 255, .3); background: rgba(169, 147, 255, .06); }
@@ -568,6 +568,12 @@ td strong { color: var(--text); font-size: 13px; font-weight: 500; }
 .wallet-result-card > .panel-kicker { margin-bottom: 26px; }
 .wallet-result-card h2 { margin: 0 0 9px; font-size: 23px; font-weight: 500; letter-spacing: -.03em; }
 .wallet-result-card > p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.wallet-result-card form { margin-top: 10px; }
+.wallet-result-message { margin-top: 18px; padding: 12px; color: var(--warning); border: 1px solid rgba(240, 198, 109, .3); border-radius: 7px; background: rgba(240, 198, 109, .06); font: 11px/1.5 var(--mono); }
+.demo-result-icon.failed, .demo-result-icon.review { color: var(--red); border-color: rgba(255, 142, 142, .35); background: rgba(255, 142, 142, .06); }
+.demo-result-icon.review { color: var(--warning); border-color: rgba(240, 198, 109, .4); background: rgba(240, 198, 109, .06); }
+.demo-result-icon.processing { color: var(--warning); border-color: rgba(240, 198, 109, .4); background: rgba(240, 198, 109, .06); }
+.wallet-processing-spinner { width: 18px; height: 18px; display: block; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
 .wallet-result-details { display: grid; gap: 10px; margin: 23px 0 16px; }
 .wallet-result-details > div { display: grid; grid-template-columns: 105px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 7px; background: rgba(9, 12, 20, .52); }
 .wallet-result-details span { color: var(--dim); font: 10px var(--mono); }
