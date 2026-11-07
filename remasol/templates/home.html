@@ -6,7 +6,8 @@
     <h1>Your customers shouldn’t need support for an overpayment.</h1>
     <p class="hero-lede">RemaSol verifies the payment, isolates the excess, and gives the customer a safe path to recover it — with the proof on-chain.</p>
     <div class="hero-actions">
-      <a class="button button-primary" href="{{ url_for('main.test_wallet') }}">Open Test Wallet {{ icon('arrow-up-right', 17) }}</a>
+      <a class="button button-primary" href="{{ url_for('main.demo_wallet') }}">Try Interactive Demo {{ icon('arrow-up-right', 17) }}</a>
+      <a class="text-link" href="{{ url_for('main.test_wallet') }}">Open Test Wallet {{ icon('arrow-up-right', 16) }}</a>
       <a class="text-link" href="{{ url_for('main.merchant_dashboard') }}">Open merchant console {{ icon('arrow-right', 16) }}</a>
       <a class="text-link" href="#how-it-works">See how recovery works {{ icon('arrow-right', 16) }}</a>
     </div>
@@ -77,6 +78,6 @@
 
 <section class="closing-cta section-wrap">
   <div><div class="eyebrow"><span class="eyebrow-line"></span> Start with a safe demo</div><h2>Make a payment.<br><em>See the proof.</em></h2></div>
-  <div class="cta-side"><p>RemaSol is a Devnet prototype for self-hosted merchants. Try the Test Wallet first, then open the merchant console to inspect treasury guardrails.</p><a class="button button-primary" href="{{ url_for('main.test_wallet') }}">Open Test Wallet {{ icon('arrow-up-right', 17) }}</a></div>
+  <div class="cta-side"><p>RemaSol is a Devnet prototype for self-hosted merchants. Walk through the lifecycle first, then open the Test Wallet to try it yourself.</p><a class="button button-primary" href="{{ url_for('main.demo_wallet') }}">Try Interactive Demo {{ icon('arrow-up-right', 17) }}</a></div>
 </section>
 {% endblock %}

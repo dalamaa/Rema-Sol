@@ -134,9 +134,9 @@ def test_each_customer_checkout_gets_unique_address_and_merchant_code(client, pr
 
 def test_test_wallet_is_separate_and_only_sends_to_active_checkouts(client, app, engine, product, fake_solana):
     token = csrf(client)
-    redirected = client.get("/demo")
-    assert redirected.status_code == 302
-    assert redirected.location.endswith("/wallet")
+    demo_page = client.get("/demo")
+    assert demo_page.status_code == 200
+    assert "From Overpayment to Refund" in demo_page.get_data(as_text=True)
     assert "Merchant Code" not in client.get("/wallet").get_data(as_text=True)
 
     created = client.post("/wallet/create", data={"csrf_token": token})
@@ -829,7 +829,7 @@ def test_rate_limits_repeated_claim_checks(app, client):
 
 def test_public_demo_creates_realistic_wallet_flow_and_sender_bound_recovery(client, app, fake_solana):
     token = csrf(client)
-    assert client.get("/demo").status_code == 302
+    assert client.get("/demo").status_code == 200
     assert client.get("/wallet").status_code == 200
 
     created = client.post("/demo/create", data={"csrf_token": token})

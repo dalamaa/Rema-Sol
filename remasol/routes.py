@@ -304,7 +304,7 @@ def create_checkout(slug):
 
 @bp.route("/demo")
 def demo_wallet():
-    return redirect(url_for("main.test_wallet"))
+    return render_template("demo_guide.html", **template_context(title="Interactive demo"))
 
 
 @bp.route("/wallet")

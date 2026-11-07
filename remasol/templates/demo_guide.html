@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="demo-guide">
+  <section class="demo-guide-hero section-wrap">
+    <div class="demo-guide-hero-copy">
+      <div class="eyebrow"><span class="eyebrow-line"></span> Interactive Solana Devnet Demo</div>
+      <h1>From Overpayment to Refund</h1>
+      <p class="demo-guide-lede">See how RemaSol helps customers recover excess SOL without a support ticket.</p>
+      <p class="demo-guide-note"><span class="demo-guide-note-icon">{{ icon('spark', 15) }}</span>Use free Devnet test SOL without a personal wallet.</p>
+      <div class="demo-guide-actions">
+        <a class="button button-primary" href="{{ url_for('main.product_checkout', slug='the-digital-creator-s-guide') }}" target="_blank" rel="noopener noreferrer">Start with the ebook {{ icon('arrow-up-right', 16) }}</a>
+        <a class="text-link" href="#lifecycle">See the lifecycle {{ icon('arrow-right', 16) }}</a>
+      </div>
+    </div>
+
+    <div class="demo-guide-hero-visual" aria-label="Illustrative payment example: customer sends 0.005 SOL for a 0.002 SOL product and 0.003 SOL is eligible for refund.">
+      <div class="demo-guide-orbit demo-guide-orbit-one"></div>
+      <div class="demo-guide-orbit demo-guide-orbit-two"></div>
+      <div class="demo-example-card">
+        <div class="demo-example-topline">
+          <span class="mono-label">Payment example</span>
+          <span class="demo-example-badge">Illustrative · not a receipt</span>
+        </div>
+        <div class="demo-example-head">
+          <div>
+            <span class="demo-example-kicker">The Digital Creator’s Guide</span>
+            <strong>Overpayment detected</strong>
+          </div>
+          <span class="demo-example-status">{{ icon('shield', 15) }} Verified</span>
+        </div>
+        <dl class="demo-math">
+          <div class="demo-math-row">
+            <dt>Product price</dt>
+            <dd>0.002 <small>SOL</small></dd>
+          </div>
+          <div class="demo-math-row demo-math-row-received">
+            <dt>Customer sends</dt>
+            <dd>0.005 <small>SOL</small></dd>
+          </div>
+          <div class="demo-math-rule" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div class="demo-math-row demo-math-row-refund">
+            <dt><span class="demo-refund-dot"></span>Excess refund</dt>
+            <dd>0.003 <small>SOL</small></dd>
+          </div>
+        </dl>
+        <div class="demo-example-foot"><span>{{ icon('lock', 14) }} Returned to the authorized sender wallet</span><span>On-chain proof</span></div>
+      </div>
+      <div class="demo-example-callout"><span>{{ icon('arrow-right', 15) }}</span><strong>RemaSol makes the difference recoverable.</strong></div>
+    </div>
+  </section>
+
+  <section class="demo-guide-signal section-wrap" aria-label="What RemaSol does">
+    <div><span class="demo-guide-signal-number">01</span><span>Verify the payment</span></div>
+    <div><span class="demo-guide-signal-number">02</span><span>Calculate the excess</span></div>
+    <div><span class="demo-guide-signal-number">03</span><span>Return it once</span></div>
+  </section>
+
+  <section class="demo-guide-section section-wrap" id="lifecycle">
+    <div class="demo-guide-section-heading">
+      <div>
+        <div class="eyebrow"><span class="eyebrow-line"></span> The lifecycle</div>
+        <h2>A clear path from “I sent too much” to “it’s back.”</h2>
+      </div>
+      <p>Follow the same four moments a judge can test in a few minutes. Keep this guide open while each tool runs in its own tab.</p>
+    </div>
+
+    <div class="demo-lifecycle">
+      <article class="demo-step">
+        <div class="demo-step-index">01</div>
+        <div class="demo-step-body">
+          <div class="demo-step-icon">{{ icon('spark', 19) }}</div>
+          <span class="demo-step-kicker">Checkout</span>
+          <h3>Choose a product</h3>
+          <p>Open the ebook, click Buy with SOL, and copy your unique payment address and Merchant Code.</p>
+          <a class="demo-step-link" href="{{ url_for('main.product_checkout', slug='the-digital-creator-s-guide') }}" target="_blank" rel="noopener noreferrer">Open Ebook {{ icon('external', 14) }}</a>
+        </div>
+      </article>
+
+      <article class="demo-step">
+        <div class="demo-step-index">02</div>
+        <div class="demo-step-body">
+          <div class="demo-step-icon demo-step-icon-violet">{{ icon('wallet', 19) }}</div>
+          <span class="demo-step-kicker">Payment</span>
+          <h3>Send test SOL</h3>
+          <p>Open Test Wallet, create a temporary wallet, paste the checkout address, and send 0.005 SOL.</p>
+          <p class="demo-step-detail">The wallet provides the sender address and transaction ID after payment.</p>
+          <a class="demo-step-link" href="{{ url_for('main.test_wallet') }}" target="_blank" rel="noopener noreferrer">Open Test Wallet {{ icon('external', 14) }}</a>
+        </div>
+      </article>
+
+      <article class="demo-step">
+        <div class="demo-step-index">03</div>
+        <div class="demo-step-body">
+          <div class="demo-step-icon demo-step-icon-gold">{{ icon('shield', 19) }}</div>
+          <span class="demo-step-kicker">Recovery</span>
+          <h3>Recover the excess</h3>
+          <p>Enter your Merchant Code, sender address, and transaction ID. RemaSol verifies the on-chain payment and calculates the eligible refund.</p>
+          <a class="demo-step-link" href="{{ url_for('main.recover') }}" target="_blank" rel="noopener noreferrer">Open Recovery {{ icon('external', 14) }}</a>
+        </div>
+      </article>
+
+      <article class="demo-step demo-step-final">
+        <div class="demo-step-index">04</div>
+        <div class="demo-step-body">
+          <div class="demo-step-icon demo-step-icon-green">{{ icon('check', 19) }}</div>
+          <span class="demo-step-kicker">Settlement</span>
+          <h3>Refund confirmed</h3>
+          <p>RemaSol returns the eligible 0.003 SOL excess to the authorized wallet and provides a verifiable Solana transaction receipt.</p>
+          <p class="demo-step-detail">Repeated claims cannot trigger a second refund. The actual receipt comes from the Recovery page.</p>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section class="demo-guide-section demo-benefit-section section-wrap">
+    <div class="demo-guide-section-heading demo-benefit-heading">
+      <div>
+        <div class="eyebrow"><span class="eyebrow-line"></span> Why it matters</div>
+        <h2>Less investigation. More confidence.</h2>
+      </div>
+      <p>RemaSol turns a messy exception into a visible, verifiable handoff for both sides of the payment.</p>
+    </div>
+    <div class="demo-compare-grid">
+      <div class="demo-compare-card demo-compare-without">
+        <div class="demo-compare-heading"><span class="demo-compare-mark">×</span><h3>Without RemaSol</h3></div>
+        <ul>
+          <li>Customer contacts support.</li>
+          <li>Merchant investigates transaction proof.</li>
+          <li>Merchant calculates the excess.</li>
+          <li>Merchant processes the refund manually.</li>
+        </ul>
+      </div>
+      <div class="demo-compare-card demo-compare-with">
+        <div class="demo-compare-heading"><span class="demo-compare-mark">{{ icon('check', 15) }}</span><h3>With RemaSol</h3></div>
+        <ul>
+          <li>Customer submits payment details.</li>
+          <li>RemaSol verifies the transaction on-chain.</li>
+          <li>Eligible excess is refunded automatically.</li>
+          <li>Merchant sees payment and refund records.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="demo-guide-close section-wrap">
+    <div>
+      <div class="eyebrow"><span class="eyebrow-line"></span> Ready when you are</div>
+      <h2>Make the mistake. <span>See the proof.</span></h2>
+    </div>
+    <p>Use the public tools with free Devnet SOL. No personal wallet, merchant login, or support ticket required.</p>
+  </section>
+</div>
+{% endblock %}
