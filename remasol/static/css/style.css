@@ -269,6 +269,7 @@ td strong { color: var(--text); font-size: 13px; font-weight: 500; }
 .address-label { display: block; margin-bottom: 7px; color: var(--dim); font: 10px var(--mono); }
 .address-box code, .locked-destination code { display: block; overflow: hidden; color: var(--text); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .address-box .copy-button { flex: 0 0 auto; }
+.payment-refund-note { margin: 12px 0 0; padding: 11px 13px; color: var(--muted); border-left: 2px solid rgba(245, 184, 61, .65); background: rgba(245, 184, 61, .05); font-size: 11px; line-height: 1.55; }
 .payment-instructions { margin-top: 28px; display: grid; gap: 14px; }
 .payment-instructions > div { display: flex; align-items: flex-start; gap: 12px; color: var(--muted); font-size: 12px; }
 .instruction-number { width: 20px; height: 20px; flex: 0 0 auto; display: grid; place-items: center; color: var(--gold); border: 1px solid rgba(245, 184, 61, .4); border-radius: 50%; font: 10px var(--mono); }
@@ -493,10 +494,6 @@ td strong { color: var(--text); font-size: 13px; font-weight: 500; }
 .demo-warning { display: flex; align-items: flex-start; gap: 8px; margin-top: 17px; padding: 11px 12px; color: var(--warning); border: 1px solid rgba(240, 198, 109, .3); border-radius: 7px; background: rgba(240, 198, 109, .06); font-size: 12px; line-height: 1.45; }
 .demo-wallet-column, .demo-result-column { display: grid; gap: 12px; }
 .wallet-card, .demo-payment-card, .merchant-code-card, .demo-result-card { overflow: hidden; }
-.wallet-balance { padding: 25px 24px 22px; border-bottom: 1px solid var(--line); }
-.wallet-balance span { display: block; color: var(--dim); font: 10px var(--mono); }
-.wallet-balance strong { display: block; margin-top: 9px; color: var(--green); font: 500 38px var(--display); letter-spacing: -.07em; }
-.wallet-balance small { color: var(--text); font: 500 12px var(--mono); letter-spacing: 0; }
 .copy-field { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 18px 24px; }
 .copy-field > div { min-width: 0; }
 .copy-field span { display: block; margin-bottom: 6px; color: var(--dim); font: 10px var(--mono); }
@@ -555,12 +552,10 @@ td strong { color: var(--text); font-size: 13px; font-weight: 500; }
 .wallet-sender-column, .wallet-result-column { display: grid; gap: 12px; }
 .wallet-card-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 9px; }
 .wallet-credit { margin: 22px 24px 0; padding: 18px; border: 1px solid rgba(245, 184, 61, .36); border-radius: 8px; background: rgba(245, 184, 61, .07); }
-.wallet-credit > span, .wallet-balance > span { display: block; color: var(--muted); font: 500 10px var(--mono); letter-spacing: .03em; }
+.wallet-credit > span { display: block; color: var(--muted); font: 500 10px var(--mono); letter-spacing: .03em; }
 .wallet-credit strong { display: block; margin-top: 7px; color: var(--gold); font: 500 31px var(--display); letter-spacing: -.05em; }
-.wallet-credit strong small, .wallet-balance strong small { color: var(--text); font: 500 12px var(--mono); letter-spacing: 0; }
-.wallet-credit p, .wallet-balance p { margin: 7px 0 0; color: var(--dim); font-size: 11px; line-height: 1.5; }
-.wallet-balance { margin: 12px 24px 0; padding: 15px 0 17px; border-bottom: 1px solid var(--line); }
-.wallet-balance strong { display: block; margin-top: 6px; color: var(--text); font: 500 20px var(--mono); }
+.wallet-credit strong small { color: var(--text); font: 500 12px var(--mono); letter-spacing: 0; }
+.wallet-credit p { margin: 7px 0 0; color: var(--dim); font-size: 11px; line-height: 1.5; }
 .wallet-send-card { overflow: hidden; }
 .wallet-send-form { display: grid; gap: 14px; padding: 22px 24px 24px; }
 .wallet-send-form label { display: grid; gap: 8px; color: var(--text); font-size: 13px; font-weight: 500; }
@@ -787,7 +782,7 @@ td strong { color: var(--text); font-size: 13px; font-weight: 500; }
   .demo-start h2 { font-size: 25px; }
   .demo-start .button { width: 100%; }
   .demo-layout { padding-bottom: 32px; }
-.wallet-balance, .copy-field, .demo-order-summary, .demo-send-form { padding-inline: 18px; }
+.copy-field, .demo-order-summary, .demo-send-form { padding-inline: 18px; }
   .demo-private-note { margin-inline: 18px; }
   .demo-order-summary > div { align-items: flex-start; flex-wrap: wrap; }
   .demo-order-summary code { max-width: calc(100% - 55px); }

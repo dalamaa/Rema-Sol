@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS refunds (
 
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
+CREATE INDEX IF NOT EXISTS idx_orders_merchant_payments ON orders(payment_signature, status, updated_at);
 CREATE INDEX IF NOT EXISTS idx_refunds_status ON refunds(status);
 
 CREATE TABLE IF NOT EXISTS treasury_settings (

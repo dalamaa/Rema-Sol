@@ -48,7 +48,7 @@
 </section>
 
 <section class="dashboard-section section-wrap">
-  <div class="section-toolbar"><div><span class="panel-kicker">Blockchain ledger</span><h2>Payments</h2><p class="section-caption">Incoming payment records are refreshed from Solana Devnet independently of customer recovery claims.</p></div><form method="post" action="{{ url_for('main.refresh_merchant_payments') }}" data-loading-text="Refreshing Devnet…"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="button button-quiet" type="submit">Refresh payments {{ icon('arrow-right', 14) }}</button></form></div>
+  <div class="section-toolbar"><div><span class="panel-kicker">Blockchain ledger</span><h2>Payments</h2><p class="section-caption">Showing the latest {{ recent_limit }} locally verified records. Use Refresh payments to synchronize with Solana Devnet.</p></div><form method="post" action="{{ url_for('main.refresh_merchant_payments') }}" data-loading-text="Refreshing Devnet…"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="button button-quiet" type="submit">Refresh payments {{ icon('arrow-right', 14) }}</button></form></div>
   <div class="panel ledger-panel">
     {% if payments %}
       <div class="table-wrap"><table class="ledger-table"><thead><tr><th>Order / product</th><th>Expected</th><th>Received</th><th>Sender</th><th>Receiving address</th><th>Transaction</th><th>Timestamp</th><th>Status</th></tr></thead><tbody>
@@ -61,7 +61,7 @@
 </section>
 
 <section class="dashboard-section section-wrap">
-  <div class="section-toolbar"><div><span class="panel-kicker">Settlement follow-up</span><h2>Refunds</h2><p class="section-caption">Refund state is durable and remains separate from incoming payment visibility.</p></div><span class="mono-label">{{ refunds|length }} records</span></div>
+  <div class="section-toolbar"><div><span class="panel-kicker">Settlement follow-up</span><h2>Refunds</h2><p class="section-caption">Showing the latest {{ recent_limit }} locally recorded refunds. Refund state is durable and remains separate from incoming payment visibility.</p></div><span class="mono-label">{{ stats.refunds }} records</span></div>
   <div class="panel ledger-panel">
     {% if refunds %}
       <div class="table-wrap"><table class="ledger-table"><thead><tr><th>Order / product</th><th>Original payment</th><th>Verified excess</th><th>Destination</th><th>Refund transaction</th><th>Status</th><th>Timestamp</th></tr></thead><tbody>
@@ -74,7 +74,7 @@
 </section>
 
 <section class="panel orders-panel section-wrap">
-  <div class="panel-heading"><div><span class="panel-kicker">Ledger view</span><h2>Recent payment activity</h2></div><span class="mono-label">{{ orders|length }} total</span></div>
+  <div class="panel-heading"><div><span class="panel-kicker">Ledger view</span><h2>Recent payment activity</h2><p class="section-caption">Showing the latest {{ recent_limit }} verified payments.</p></div><span class="mono-label">{{ stats.payments }} total</span></div>
   {% if orders %}
     <div class="table-wrap"><table><thead><tr><th>Product</th><th>Payment room</th><th>Received</th><th>Status</th><th>Refund</th></tr></thead><tbody>
       {% for order in orders %}<tr><td><strong>{{ order.product_name }}</strong><span class="cell-sub">{{ order.created_at[:16].replace('T', ' ') }} UTC</span></td><td class="mono">{{ order.payment_address|short }}</td><td class="mono">{{ order.payment_sol }} SOL</td><td><span class="status-pill status-{{ order.payment_status }}"><span></span>{{ order.payment_status|status_label }}</span></td><td>{% if order.refund_status %}<span class="status-pill status-{{ order.refund_status }}"><span></span>{{ order.refund_status|status_label }}</span>{% else %}<span class="muted">—</span>{% endif %}</td></tr>{% endfor %}

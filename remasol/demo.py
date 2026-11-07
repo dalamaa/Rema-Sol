@@ -73,7 +73,16 @@ class DemoTreasuryService:
     def _ensure_treasury(self):
         connection = self._connection()
         try:
-            if connection.execute("SELECT 1 FROM treasury_settings WHERE id = 1").fetchone():
+            existing = connection.execute(
+                "SELECT max_payment_lamports FROM treasury_settings WHERE id = 1"
+            ).fetchone()
+            if existing:
+                configured_max = int(self.config["DEMO_MAX_PAYMENT_LAMPORTS"])
+                if int(existing["max_payment_lamports"]) > configured_max:
+                    connection.execute(
+                        "UPDATE treasury_settings SET max_payment_lamports = ?, updated_at = ? WHERE id = 1",
+                        (configured_max, iso_now()),
+                    )
                 return
         finally:
             connection.close()
@@ -197,11 +206,6 @@ class DemoTreasuryService:
         result["order"] = order
         result["selected_sol"] = sol_from_lamports(result.get("selected_lamports"))
         result["funding_sol"] = sol_from_lamports(result.get("funding_lamports"))
-        try:
-            result["buyer_balance_lamports"] = self.solana.get_balance(result["buyer_address"])
-        except Exception:
-            result["buyer_balance_lamports"] = None
-        result["buyer_balance_sol"] = sol_from_lamports(result.get("buyer_balance_lamports"))
         result.pop("encrypted_private_key", None)
         result.pop("funding_signed_transaction", None)
         result.pop("payment_signed_transaction", None)
@@ -236,14 +240,8 @@ class DemoTreasuryService:
         if not row:
             return None
         result = dict(row)
-        try:
-            result["available_balance_lamports"] = self.solana.get_balance(result["sender_address"])
-        except Exception:
-            result["available_balance_lamports"] = None
-        result["available_balance_sol"] = sol_from_lamports(result.get("available_balance_lamports"))
         result["selected_sol"] = sol_from_lamports(result.get("selected_lamports"))
         result["funding_sol"] = sol_from_lamports(result.get("funding_lamports"))
-        result["actual_balance_available"] = result.get("available_balance_lamports") is not None
         result.pop("encrypted_private_key", None)
         result.pop("funding_signed_transaction", None)
         result.pop("payment_signed_transaction", None)
@@ -487,12 +485,15 @@ class DemoTreasuryService:
             return self._public_session(self._session(session_id=demo_id)), merchant_code
 
     def _parse_amount(self, value: str, settings: dict[str, Any]) -> int:
+        maximum = min(settings["max_payment_lamports"], self.config["DEMO_MAX_PAYMENT_LAMPORTS"])
+        minimum = self.config["DEMO_MIN_PAYMENT_LAMPORTS"]
         try:
             amount = lamports_from_sol(value)
         except DomainError as error:
-            raise DomainError("Enter a payment amount between 0.0005 and 0.02 SOL.", "validation") from error
-        maximum = min(settings["max_payment_lamports"], self.config["DEMO_MAX_PAYMENT_LAMPORTS"])
-        minimum = self.config["DEMO_MIN_PAYMENT_LAMPORTS"]
+            raise DomainError(
+                f"Enter a payment amount between {sol_from_lamports(minimum)} and {sol_from_lamports(maximum)} SOL.",
+                "validation",
+            ) from error
         if amount < minimum or amount > maximum:
             raise DomainError(
                 f"Enter a payment amount between {sol_from_lamports(minimum)} and {sol_from_lamports(maximum)} SOL.",
@@ -1070,7 +1071,10 @@ class DemoTreasuryService:
         except (DomainError, TypeError, ValueError) as error:
             raise DomainError("Use valid SOL limits and a whole-number concurrency limit.", "validation") from error
         if not self.config["DEMO_MIN_PAYMENT_LAMPORTS"] <= max_payment_lamports <= self.config["DEMO_MAX_PAYMENT_LAMPORTS"]:
-            raise DomainError("Maximum demo payment must stay between 0.0005 and 0.02 SOL.", "validation")
+            raise DomainError(
+                f"Maximum demo payment must stay between {sol_from_lamports(self.config['DEMO_MIN_PAYMENT_LAMPORTS'])} and {sol_from_lamports(self.config['DEMO_MAX_PAYMENT_LAMPORTS'])} SOL.",
+                "validation",
+            )
         if daily_budget_lamports < max_payment_lamports or max_concurrent_demos < 1 or max_concurrent_demos > 100:
             raise DomainError("Daily budget must cover one demo and concurrency must be between 1 and 100.", "validation")
         connection = self._connection()

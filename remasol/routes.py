@@ -175,14 +175,10 @@ def merchant_logout():
 @merchant_required
 def merchant_dashboard():
     products = engine().list_products()
-    payments, refunds = engine().merchant_ledger()
-    orders = engine().list_merchant_payment_orders()
-    stats = {
-        "products": len(products),
-        "payments": len(payments),
-        "overpayments": sum(payment["payment_status"] == "overpaid" for payment in payments),
-        "refunded": sum(payment["payment_status"] == "refunded" for payment in payments),
-    }
+    stats = engine().merchant_stats()
+    payments = engine().list_merchant_payment_orders_recent()
+    refunds = engine().list_refunds(limit=engine().MERCHANT_RECENT_LIMIT)
+    orders = payments
     return render_template(
         "dashboard.html",
         products=products,
@@ -190,6 +186,7 @@ def merchant_dashboard():
         payments=payments,
         refunds=refunds,
         stats=stats,
+        recent_limit=engine().MERCHANT_RECENT_LIMIT,
         **template_context(),
     )
 
@@ -264,10 +261,11 @@ def create_product():
             "dashboard.html",
             error,
             products=engine().list_products(),
-            orders=engine().list_merchant_payment_orders(),
-            payments=engine().refresh_payment_records(),
-            refunds=engine().list_refunds(),
-            stats={"products": 0, "payments": 0, "overpayments": 0, "refunded": 0},
+            orders=engine().list_merchant_payment_orders_recent(),
+            payments=engine().list_merchant_payment_orders_recent(),
+            refunds=engine().list_refunds(limit=engine().MERCHANT_RECENT_LIMIT),
+            stats=engine().merchant_stats(),
+            recent_limit=engine().MERCHANT_RECENT_LIMIT,
         )
     flash(f"{product['name']} is ready for its first checkout.", "success")
     return redirect(url_for("main.merchant_dashboard"))

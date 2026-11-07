@@ -93,6 +93,23 @@ def test_customer_flow_creates_a_payment_only_checkout(client, product):
     assert order["refund_destination_mode"] == "none"
 
 
+def test_exchange_refund_guidance_is_visible_before_recovery_action(client, product):
+    token = csrf(client)
+    checkout = client.post(
+        f"/p/{product['slug']}/checkout",
+        data={"csrf_token": token},
+        follow_redirects=True,
+    ).get_data(as_text=True)
+    exchange_note = "For easier refunds, pay from a Solana wallet you control."
+    assert exchange_note in checkout
+    assert checkout.index("payment-refund-note") < checkout.index("payment-actions")
+
+    recovery = client.get("/recover").get_data(as_text=True)
+    assert "does not guarantee that your exchange account receives the funds" in recovery
+    assert "cannot reliably identify every exchange wallet" in recovery
+    assert recovery.index("Exchange withdrawal note") < recovery.index("Check eligibility")
+
+
 def test_each_customer_checkout_gets_unique_address_and_merchant_code(client, product):
     token = csrf(client)
     checkout_pages = [
@@ -127,7 +144,7 @@ def test_test_wallet_is_separate_and_only_sends_to_active_checkouts(client, app,
     assert created.location.startswith("/wallet/test/")
     test_url = created.location
     wallet_html = client.get(test_url).get_data(as_text=True)
-    for preset in ("0.001", "0.002", "0.005", "0.02"):
+    for preset in ("0.001", "0.002", "0.004", "0.005"):
         assert preset in wallet_html
     with client.session_transaction() as session:
         token = session["csrf_token"]
@@ -147,6 +164,18 @@ def test_test_wallet_is_separate_and_only_sends_to_active_checkouts(client, app,
     assert fake_solana.broadcast_calls == 0
 
     order, _claim_code = engine.create_order_draft(product["slug"], "127.0.0.1")
+    too_high = client.post(
+        "/wallet/send",
+        data={
+            "csrf_token": token,
+            "session_id": session_id,
+            "recipient_address": order["payment_address"],
+            "amount": "0.005001",
+        },
+    )
+    assert too_high.status_code == 400
+    assert "between 0.0005 and 0.005 SOL" in too_high.get_data(as_text=True)
+    assert fake_solana.broadcast_calls == 0
     sent = client.post(
         "/wallet/send",
         data={
@@ -215,14 +244,14 @@ def test_test_wallet_never_overwrites_a_locked_refund_destination(
     assert engine.get_order(order["id"])["refund_destination"] == "locked-refund-wallet"
     assert app.extensions["demo"]._wallet_session(browser_id=browser_id)["selected_lamports"] is None
 
-def test_test_wallet_shows_per_payment_limit_and_actual_balance(client, app, fake_solana):
+def test_test_wallet_shows_per_payment_limit_without_balance_display(client, app, fake_solana):
     token = csrf(client)
     created = client.post("/wallet/create", data={"csrf_token": token})
     assert created.status_code == 302
     wallet_html = client.get("/wallet").get_data(as_text=True)
     assert "Maximum Test Payment" in wallet_html
     assert "This maximum resets for every payment" in wallet_html
-    assert "0.02 <small>SOL" in wallet_html
+    assert "0.005 <small>SOL" in wallet_html
     assert "Allocated today" not in wallet_html
     assert "Still unrecovered" not in wallet_html
     assert "earlier test attempts" not in wallet_html
@@ -234,17 +263,11 @@ def test_test_wallet_shows_per_payment_limit_and_actual_balance(client, app, fak
     assert "RemaSol provides free Devnet SOL for test payments." in test_page
     assert "Allocated today" not in test_page
     assert "Still unrecovered" not in test_page
-    assert "Actual temporary wallet balance" in test_page
-    assert "This is the on-chain balance of this temporary wallet" in test_page
-
+    assert "Actual temporary wallet balance" not in test_page
+    assert "on-chain balance of this temporary wallet" not in test_page
     settings = app.extensions["demo"]._settings()
-    fake_solana.balances[settings["public_address"]] = 0
-    depleted = client.get("/wallet").get_data(as_text=True)
-    assert "Maximum Test Payment" in depleted
-    assert "0.02 <small>SOL" in depleted
-    test_page = client.get(created.location).get_data(as_text=True)
-    assert "Actual temporary wallet balance" in test_page
-    assert "2 <small>SOL" in test_page
+    assert app.extensions["demo"]._parse_amount("0.0005", settings) == 500_000
+    assert app.extensions["demo"]._parse_amount("0.005", settings) == 5_000_000
 
 
 def test_uncertain_wallet_payment_recheck_never_broadcasts_again(client, engine, product, fake_solana):
@@ -326,10 +349,10 @@ def test_new_test_creates_fresh_wallet_and_preserves_history(client, app, engine
 
 def test_ten_sequential_tests_from_one_browser_get_fresh_wallets(client, app, engine, fake_solana):
     app.extensions["rate_limiter"].enabled = True
-    app.extensions["demo"].update_settings(True, "0.02", "1", "3")
+    app.extensions["demo"].update_settings(True, "0.005", "1", "3")
     token = csrf(client)
     demo_product = engine.get_product(app.config["DEMO_PRODUCT_SLUG"])
-    amounts = ("0.001", "0.002", "0.005", "0.02")
+    amounts = ("0.001", "0.002", "0.004", "0.005")
     senders = []
 
     for index in range(10):
@@ -361,7 +384,7 @@ def test_ten_sequential_tests_from_one_browser_get_fresh_wallets(client, app, en
 
 def test_completed_and_failed_operations_release_concurrency_slot(client, app, engine, fake_solana):
     demo = app.extensions["demo"]
-    demo.update_settings(True, "0.02", "1", "1")
+    demo.update_settings(True, "0.005", "1", "1")
     token = csrf(client)
     demo_product = engine.get_product(app.config["DEMO_PRODUCT_SLUG"])
 
@@ -427,7 +450,7 @@ def test_completed_and_failed_operations_release_concurrency_slot(client, app, e
 
 def test_idle_and_old_failed_wallets_do_not_consume_operation_slots(client, app, engine, fake_solana):
     demo = app.extensions["demo"]
-    demo.update_settings(True, "0.02", "1", "1")
+    demo.update_settings(True, "0.005", "1", "1")
     idle = demo.create_test_wallet("old-idle-browser", "127.0.0.1")
     failed = demo.create_test_wallet("old-failed-browser", "127.0.0.1")
     demo._mark_wallet(failed["id"], "failed", "historical failure")
@@ -453,7 +476,7 @@ def test_idle_and_old_failed_wallets_do_not_consume_operation_slots(client, app,
 
 def test_unresolved_operation_keeps_slot_until_reconciled(client, app, engine, fake_solana):
     demo = app.extensions["demo"]
-    demo.update_settings(True, "0.02", "1", "1")
+    demo.update_settings(True, "0.005", "1", "1")
     token = csrf(client)
     demo_product = engine.get_product(app.config["DEMO_PRODUCT_SLUG"])
 
@@ -602,8 +625,21 @@ def test_merchant_dashboard_refreshes_payments_without_recovery_claim(client, en
     login(client)
     with client.session_transaction() as session:
         token = session["csrf_token"]
+    rpc_calls = []
+    for method_name in ("get_signatures_for_address", "signature_status", "verify_payment"):
+        original = getattr(fake_solana, method_name)
+
+        def counted(*args, _original=original, _name=method_name, **kwargs):
+            rpc_calls.append(_name)
+            return _original(*args, **kwargs)
+
+        setattr(fake_solana, method_name, counted)
+    fast_dashboard = client.get("/merchant")
+    assert fast_dashboard.status_code == 200
+    assert rpc_calls == []
     refreshed = client.post("/merchant/payments/refresh", data={"csrf_token": token})
     assert refreshed.status_code == 302
+    assert rpc_calls
     dashboard = client.get("/merchant").get_data(as_text=True)
     assert "Payments" in dashboard
     assert "Refunds" in dashboard
@@ -1019,7 +1055,7 @@ def test_demo_treasury_is_authenticated_and_configurable(client):
         data={
             "csrf_token": token,
             "enabled": "",
-            "max_payment": "0.02",
+            "max_payment": "0.005",
             "daily_budget": "0.1",
             "max_concurrent": "2",
         },

@@ -29,7 +29,6 @@
     <div class="demo-wallet-column">
       <div class="panel wallet-card">
         <div class="panel-heading"><div><span class="panel-kicker">Temporary buyer wallet</span><h2>Demo wallet</h2></div><span class="status-pill status-{{ demo.status }}"><span></span>{{ demo.status|status_label }}</span></div>
-        <div class="wallet-balance"><span>Test wallet balance</span><strong>{{ demo.buyer_balance_sol }} <small>SOL</small></strong></div>
         <div class="copy-field"><div><span>Sender wallet address</span><code>{{ demo.buyer_address }}</code></div><button type="button" class="copy-button" data-copy="{{ demo.buyer_address }}" aria-label="Copy sender wallet address">{{ icon('copy', 15) }} Copy</button></div>
         <div class="demo-private-note">{{ icon('lock', 14) }} This wallet is temporary and controlled by the demo service for this session.</div>
       </div>
@@ -40,7 +39,7 @@
         <form method="post" action="{{ url_for('main.send_demo_payment') }}" class="demo-send-form" data-loading-text="Funding and sending…">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <label for="demo-amount">Amount to send<input id="demo-amount" name="amount" value="{{ demo.selected_sol if demo.selected_lamports else '0.002' }}" inputmode="decimal" min="{{ min_payment_sol }}" max="{{ max_payment_sol }}" step="0.000001" required><span class="field-hint">Choose a case to test; the server validates the exact lamports value.</span></label>
-          <div class="preset-row" aria-label="Preset payment amounts"><button type="button" class="preset-button" data-amount="0.0005">Underpayment <span>0.0005</span></button><button type="button" class="preset-button" data-amount="0.002">Exact <span>0.002</span></button><button type="button" class="preset-button" data-amount="0.005">Overpayment <span>0.005</span></button></div>
+          <div class="preset-row" aria-label="Preset payment amounts"><button type="button" class="preset-button" data-amount="0.001">Underpayment <span>0.001</span></button><button type="button" class="preset-button" data-amount="0.002">Exact <span>0.002</span></button><button type="button" class="preset-button" data-amount="0.004">Overpayment <span>0.004</span></button><button type="button" class="preset-button" data-amount="0.005">Maximum <span>0.005</span></button></div>
           {% if demo.status in ['created', 'funding', 'funding_pending', 'funded', 'payment_pending'] %}
             <button class="button button-primary button-full" type="submit">{{ 'Check transaction status' if demo.funding_signature or demo.payment_signature else 'Send Test SOL' }} {{ icon('arrow-right', 16) }}</button>
           {% endif %}

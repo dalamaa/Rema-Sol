@@ -25,7 +25,6 @@
       <div class="panel wallet-card">
         <div class="panel-heading"><div><span class="panel-kicker">Temporary sender wallet</span><h2>Test Wallet</h2></div><div class="wallet-card-actions"><span class="status-pill status-{{ wallet.status }}"><span></span>{{ wallet.status|status_label }}</span><form method="post" action="{{ url_for('main.create_test_wallet') }}" data-loading-text="Creating New Test…"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="button button-quiet button-small" type="submit">New Test</button></form></div></div>
         <div class="wallet-credit"><span>Maximum Test Payment</span><strong>{{ max_payment_sol }} <small>SOL</small></strong><p>RemaSol provides free Devnet SOL for test payments. This is the maximum per payment, not a lifetime credit balance.</p></div>
-        <div class="wallet-balance"><span>Actual temporary wallet balance</span><strong>{% if wallet.actual_balance_available %}{{ wallet.available_balance_sol }} <small>SOL</small>{% else %}Unavailable{% endif %}</strong><p>This is the on-chain balance of this temporary wallet, separate from the per-payment limit.</p></div>
         <div class="copy-field"><div><span>Sender wallet address</span><code>{{ wallet.sender_address }}</code></div><button type="button" class="copy-button" data-copy="{{ wallet.sender_address }}" aria-label="Copy sender wallet address">{{ icon('copy', 15) }} Copy</button></div>
         <div class="demo-private-note">{{ icon('lock', 14) }} This wallet is temporary and controlled by the Test Wallet service for this session.</div>
       </div>
@@ -40,8 +39,8 @@
           <div class="wallet-preset-row" aria-label="Test payment amount presets">
             <button type="button" class="preset-button" data-target="wallet-amount" data-amount="0.001">0.001 <span>SOL</span></button>
             <button type="button" class="preset-button" data-target="wallet-amount" data-amount="0.002">0.002 <span>SOL</span></button>
+            <button type="button" class="preset-button" data-target="wallet-amount" data-amount="0.004">0.004 <span>SOL</span></button>
             <button type="button" class="preset-button" data-target="wallet-amount" data-amount="0.005">0.005 <span>SOL</span></button>
-            <button type="button" class="preset-button" data-target="wallet-amount" data-amount="0.02">0.02 <span>SOL</span></button>
           </div>
           {% if wallet.status in ['created', 'funding', 'funding_pending', 'funded', 'payment_pending'] %}<button class="button button-primary button-full" type="submit">{{ 'Check payment status' if wallet.funding_signature or wallet.payment_signature else 'Send Test SOL' }} {{ icon('arrow-right', 16) }}</button>{% endif %}
         </form>

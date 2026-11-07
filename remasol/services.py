@@ -68,6 +68,17 @@ def _row(row: sqlite3.Row | None) -> dict[str, Any] | None:
 
 
 class PaymentEngine:
+    MERCHANT_RECENT_LIMIT = 50
+    VERIFIED_PAYMENT_STATUSES = (
+        "paid_exact",
+        "underpaid",
+        "overpaid",
+        "refund_processing",
+        "refund_submitted",
+        "refund_finalized",
+        "needs_review",
+    )
+
     def __init__(self, db_path: str, secret_key: str, wallet_encryption_key: str, solana, config):
         self.db_path = db_path
         self.secret_key = secret_key
@@ -462,7 +473,7 @@ class PaymentEngine:
         finally:
             connection.close()
 
-    def list_merchant_payment_orders(self) -> list[dict[str, Any]]:
+    def list_merchant_payment_orders(self, limit: int | None = None) -> list[dict[str, Any]]:
         """Return only orders with a durable, verified incoming payment.
 
         ``list_orders`` intentionally retains every checkout for address
@@ -470,7 +481,84 @@ class PaymentEngine:
         must use this filtered projection so creating a checkout cannot appear
         as a zero-value payment.
         """
-        return [order for order in self.list_orders() if self._has_verified_payment(order)]
+        return self.list_merchant_payment_orders_recent(limit)
+
+    def list_merchant_payment_orders_recent(
+        self, limit: int | None = MERCHANT_RECENT_LIMIT
+    ) -> list[dict[str, Any]]:
+        """Return recent verified payments without loading unpaid checkouts."""
+        placeholders = ", ".join("?" for _ in self.VERIFIED_PAYMENT_STATUSES)
+        query = f"""SELECT o.*, p.name AS product_name, p.price_lamports AS product_price_lamports,
+            r.status AS refund_status, r.transaction_signature
+            FROM orders o JOIN products p ON p.id = o.product_id
+            LEFT JOIN refunds r ON r.order_id = o.id
+            WHERE o.payment_signature IS NOT NULL
+              AND o.payment_source_address IS NOT NULL
+              AND o.payment_lamports IS NOT NULL
+              AND o.status IN ({placeholders})
+            ORDER BY o.updated_at DESC, o.created_at DESC"""
+        parameters: list[Any] = list(self.VERIFIED_PAYMENT_STATUSES)
+        if limit is not None:
+            query += " LIMIT ?"
+            parameters.append(max(1, int(limit)))
+        connection = self._connection()
+        try:
+            rows = connection.execute(query, parameters).fetchall()
+            return [self._format_order_row(row) for row in rows]
+        finally:
+            connection.close()
+
+    @staticmethod
+    def _format_order_row(row: sqlite3.Row) -> dict[str, Any]:
+        value = dict(row)
+        if value.get("price_lamports") is None:
+            value["price_lamports"] = value["product_price_lamports"]
+        value["price_sol"] = sol_from_lamports(value["price_lamports"])
+        value["payment_sol"] = sol_from_lamports(value["payment_lamports"])
+        value["payment_status"] = PaymentEngine._payment_status(
+            value["status"], value.get("refund_status")
+        )
+        value["expected_lamports"] = value["price_lamports"]
+        value["expected_sol"] = sol_from_lamports(value["price_lamports"])
+        value["received_lamports"] = value.get("payment_lamports")
+        value["received_sol"] = sol_from_lamports(value.get("payment_lamports"))
+        value["sender_address"] = value.get("payment_source_address")
+        value["receiving_address"] = value["payment_address"]
+        value["payment_timestamp"] = value.get("verified_at") or value.get("updated_at") or value.get("created_at")
+        value["review_reason"] = None
+        return value
+
+    def merchant_stats(self) -> dict[str, int]:
+        """Return dashboard totals from SQLite without scanning Solana."""
+        placeholders = ", ".join("?" for _ in self.VERIFIED_PAYMENT_STATUSES)
+        connection = self._connection()
+        try:
+            row = connection.execute(
+                f"""WITH verified AS (
+                    SELECT o.payment_lamports, COALESCE(o.price_lamports, p.price_lamports) AS price_lamports,
+                           r.status AS refund_status
+                    FROM orders o
+                    JOIN products p ON p.id = o.product_id
+                    LEFT JOIN refunds r ON r.order_id = o.id
+                    WHERE o.payment_signature IS NOT NULL
+                      AND o.payment_source_address IS NOT NULL
+                      AND o.payment_lamports IS NOT NULL
+                      AND o.status IN ({placeholders})
+                )
+                SELECT
+                    (SELECT COUNT(*) FROM products) AS products,
+                    COUNT(*) AS payments,
+                    COALESCE(SUM(CASE WHEN payment_lamports > price_lamports
+                                      AND (refund_status IS NULL OR refund_status != 'finalized')
+                                      THEN 1 ELSE 0 END), 0) AS overpayments,
+                    COALESCE(SUM(CASE WHEN refund_status = 'finalized' THEN 1 ELSE 0 END), 0) AS refunded,
+                    (SELECT COUNT(*) FROM refunds) AS refunds
+                FROM verified""",
+                self.VERIFIED_PAYMENT_STATUSES,
+            ).fetchone()
+            return {key: int(row[key] or 0) for key in row.keys()}
+        finally:
+            connection.close()
 
     @staticmethod
     def _payment_status(status: str | None, refund_status: str | None = None) -> str:
@@ -522,17 +610,20 @@ class PaymentEngine:
             return "overpaid"
         return "paid"
 
-    def list_refunds(self) -> list[dict[str, Any]]:
+    def list_refunds(self, limit: int | None = None) -> list[dict[str, Any]]:
         connection = self._connection()
         try:
-            rows = connection.execute(
-                """SELECT r.*, o.product_id, o.payment_signature AS original_payment_signature,
+            query = """SELECT r.*, o.product_id, o.payment_signature AS original_payment_signature,
                 o.payment_address, p.name AS product_name
                 FROM refunds r
                 JOIN orders o ON o.id = r.order_id
                 JOIN products p ON p.id = o.product_id
                 ORDER BY r.updated_at DESC"""
-            ).fetchall()
+            if limit is not None:
+                query += " LIMIT ?"
+                rows = connection.execute(query, (max(1, int(limit)),)).fetchall()
+            else:
+                rows = connection.execute(query).fetchall()
             output = []
             for row in rows:
                 value = dict(row)

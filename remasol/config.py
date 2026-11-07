@@ -18,7 +18,7 @@ class Config:
         os.environ.get("DEMO_MIN_PAYMENT_LAMPORTS", "500000")
     )
     DEMO_MAX_PAYMENT_LAMPORTS = int(
-        os.environ.get("DEMO_MAX_PAYMENT_LAMPORTS", "20000000")
+        os.environ.get("DEMO_MAX_PAYMENT_LAMPORTS", "5000000")
     )
     DEMO_FUNDING_FEE_BUFFER_LAMPORTS = int(
         os.environ.get("DEMO_FUNDING_FEE_BUFFER_LAMPORTS", "100000")

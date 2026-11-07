@@ -9,6 +9,8 @@
   <div class="recovery-seal">{{ icon('shield', 26) }}<span>Public proof<br><strong>Private access</strong></span></div>
 </section>
 
+<section class="warning-band section-wrap recovery-warning-top"><div class="warning-icon">{{ icon('alert', 18) }}</div><div><strong>Exchange withdrawal note</strong><p>If you paid directly from an exchange, a refund to an exchange-controlled wallet does not guarantee that your exchange account receives the funds. RemaSol can verify the on-chain source, but cannot reliably identify every exchange wallet; some payments may require manual review.</p></div></section>
+
 <section class="recovery-grid section-wrap">
   <div class="panel recovery-form-panel">
     <div class="panel-heading"><div><span class="panel-kicker">Check eligibility</span><h2>Find your payment</h2></div><span class="step-count">1</span></div>
@@ -41,6 +43,4 @@
     {% endif %}
   </div>
 </section>
-
-<section class="warning-band section-wrap"><div class="warning-icon">{{ icon('alert', 18) }}</div><div><strong>Exchange withdrawal note</strong><p>Some exchanges use hot wallets or special deposit procedures. A finalized Solana refund proves the transfer on-chain; it does not prove that an exchange account credited it.</p></div></section>
 {% endblock %}

@@ -46,7 +46,7 @@
     <form method="post" action="{{ url_for('main.update_merchant_treasury') }}" class="stack-form" data-loading-text="Saving limits…">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <label class="toggle-label"><span><strong>Allow new demo payments</strong><small>Pause new funding attempts without deleting sessions.</small></span><input type="checkbox" name="enabled" {% if treasury.enabled %}checked{% endif %}><i aria-hidden="true"></i></label>
-      <label>Maximum payment<div class="input-with-suffix"><input name="max_payment" value="{{ treasury.max_payment_sol }}" inputmode="decimal" required><span>SOL</span></div><span class="field-hint">Hard cap per demo payment, between 0.0005 and 0.02 SOL.</span></label>
+      <label>Maximum payment<div class="input-with-suffix"><input name="max_payment" value="{{ treasury.max_payment_sol }}" inputmode="decimal" required><span>SOL</span></div><span class="field-hint">Hard cap per demo payment, between 0.0005 and 0.005 SOL.</span></label>
       <label>Daily allocation<div class="input-with-suffix"><input name="daily_budget" value="{{ treasury.daily_budget_sol }}" inputmode="decimal" required><span>SOL</span></div><span class="field-hint">Includes the small funding fee buffer for each session.</span></label>
       <label>Maximum concurrent demos<input name="max_concurrent" value="{{ treasury.max_concurrent_demos }}" inputmode="numeric" required><span class="field-hint">Atomic reservations prevent the public flow from exceeding this count.</span></label>
       <button class="button button-primary button-full" type="submit">Save demo limits {{ icon('arrow-right', 16) }}</button>
