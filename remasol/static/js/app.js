@@ -405,6 +405,38 @@
     });
   }
 
+  document.querySelectorAll("[data-eligibility-form]").forEach((form) => {
+    const button = form.querySelector("button[type='submit']");
+    const note = form.querySelector("[data-eligibility-note]");
+    const fingerprint = () => ["merchant_code", "sender_address", "signature"]
+      .map((name) => String(form.elements[name]?.value || "").trim())
+      .join("\u001f");
+    const checkedFingerprint = form.dataset.checkedResult === "true" ? fingerprint() : null;
+
+    if (checkedFingerprint !== null && button) {
+      button.disabled = true;
+      button.dataset.checkedHtml = button.innerHTML;
+      button.textContent = "Eligibility checked";
+    }
+
+    form.addEventListener("input", () => {
+      if (!button || checkedFingerprint === null || form.dataset.submitPending === "true") return;
+      const changed = fingerprint() !== checkedFingerprint;
+      button.disabled = !changed;
+      if (changed) button.innerHTML = button.dataset.checkedHtml;
+      else button.textContent = "Eligibility checked";
+      if (note) note.hidden = changed;
+    });
+
+    form.addEventListener("submit", (event) => {
+      if (form.dataset.submitPending === "true" || button?.disabled) {
+        event.preventDefault();
+        return;
+      }
+      form.dataset.submitPending = "true";
+    });
+  });
+
   document.addEventListener("submit", (event) => {
     const form = event.target;
     if (form.matches("[data-wallet-payment]")) return;

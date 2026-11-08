@@ -32,7 +32,8 @@ def test_home_and_merchant_pages_render(client):
     login_page = client.get("/merchant/login")
     assert login_page.status_code == 200
     login_html = login_page.get_data(as_text=True)
-    assert "Preview merchant dashboard" in login_html
+    assert "Open public dashboard preview" in login_html
+    assert "Public preview · no sign-in required" in login_html
     assert "/static/img/merchant-dashboard-preview.png" in login_html
     login(client)
     assert client.get("/merchant").status_code == 200
@@ -185,6 +186,34 @@ def test_exchange_refund_guidance_is_visible_before_recovery_action(client, prod
     assert "We'll need to review the payment before we send anything back." in recovery
     assert "Exchange withdrawal note" not in recovery
     assert recovery.index("Paid from an exchange?") < recovery.index("Check eligibility")
+
+
+def test_recovery_result_is_first_and_keeps_correction_form(client, engine, product, fake_solana):
+    token = csrf(client)
+    order, merchant_code = create_order(engine, product, fake_solana, destination="refund-wallet")
+    signature = "eligible-layout-signature"
+    add_payment(fake_solana, signature, order, order["price_lamports"] + 3_000_000)
+    fake_solana.payments[signature]["source"] = "refund-wallet"
+
+    response = client.post(
+        "/recover/check",
+        data={
+            "csrf_token": token,
+            "merchant_code": merchant_code,
+            "sender_address": "refund-wallet",
+            "signature": signature,
+        },
+    )
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "recovery-hero-results" not in html
+    assert "recovery-grid-results" in html
+    assert "recovery-result-state" in html
+    for label in ("Eligibility status", "Verified payment", "Product price", "Refundable excess", "Destination", "Next action"):
+        assert label in html
+    assert "Request the verified excess" in html
+    assert "data-eligibility-form" in html
+    assert 'data-checked-result="true"' in html
 
 
 def test_each_customer_checkout_gets_unique_address_and_merchant_code(client, product):
