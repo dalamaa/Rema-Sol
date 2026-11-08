@@ -2,122 +2,193 @@
 
 > Keep the payment. Return the extra.
 
-RemaSol is a self-hosted Solana payment recovery MVP for small merchants. When a customer sends more SOL than a digital product costs, RemaSol verifies the finalized Devnet transfer, calculates the excess in lamports, and gives the customer one secure path to request a refund without opening a support ticket.
+[![Watch Demo](https://img.shields.io/badge/Watch%20Demo-YouTube-red?logo=youtube)](https://youtu.be/0r_kt_4iHrA) · [Live application](https://remasol.ddnsfree.com/) · [Interactive demo](https://remasol.ddnsfree.com/demo) · [Source code](https://github.com/dalamaa/Rema-Sol)
 
-This project is intentionally a Devnet prototype. It is not production custody software and must not be used with mainnet funds.
+RemaSol is a self-hosted Solana payment-recovery prototype for small merchants. It addresses the awkward exception after a customer sends more SOL than a product costs: verify what actually settled, calculate the excess, and give an eligible customer a clear recovery path. Uncertain cases remain visible for manual review instead of becoming an unsafe automatic payout.
 
-## What is implemented
+This repository documents an MLH Solana Hackathon prototype running on Solana Devnet. It is not production custody software and must not be used with mainnet funds.
 
-- Flask + Jinja merchant console with product creation and shareable checkout links.
-- Test Wallet at `/wallet` for real, capped Devnet payments to active RemaSol checkout addresses. `New Test` opens an owner-scoped `/wallet/test/<session_id>` page; transaction records remain durable internally. `/demo` redirects there for compatibility.
-- Admin-only demo treasury at `/merchant/treasury` with balance, recent transfers, enable/pause, per-payment, daily, and concurrency guardrails.
-- A unique Solana payment wallet for every order.
-- A private 192-bit claim code generated with `secrets`; only a salted PBKDF2 hash is stored.
-- Ordinary checkout does not ask for a refund wallet; after verification, the original sender is derived from the native transfer and cannot be replaced by a claimant.
-- Funded demo orders bind the application-controlled buyer wallet as the refund destination before payment.
-- Direct native SOL transfer verification through Solana Devnet RPC.
-- Exact payment, underpayment, overpayment, ambiguous transfer, duplicate signature, and expired room states.
-- Integer lamport calculations throughout the business logic.
-- Durable SQLite refund records with unique order/refund and transaction-signature constraints.
-- Atomic `BEGIN IMMEDIATE` refund reservation, signed transaction persistence before broadcast, and idempotent repeat requests.
-- Uncertain broadcast outcomes become `needs_review`; RemaSol never constructs a second payout while the first signed transaction is unresolved.
-- Per-process rate limits for checkout, claim, verification, and refund requests plus an outstanding-checkout cap.
-- Session-protected merchant administration with a Werkzeug password hash; customer checkout and recovery remain public.
-- CSRF-protected forms, bounded request size, parameterized SQL, validated addresses/signatures, and safe external Explorer links.
-- Automated tests with a mocked Solana RPC service.
+## The merchant problem
+
+Suppose a digital product costs **0.002 SOL**, but the customer accidentally sends **0.005 SOL**. The merchant should keep the agreed price and return the **0.003 SOL** excess.
+
+Without a recovery workflow, the merchant has to match the transfer to an order, verify the amount and destination, calculate the difference, determine where a refund can safely go, send it, record the outcome, and answer the customer. A small payment mistake becomes support work and introduces the risk of paying twice.
+
+RemaSol focuses on that post-payment exception. It does not claim to eliminate merchant operations: ambiguous payments, unverified destinations, uncertain network outcomes, and exchange-controlled source addresses can still require manual review.
+
+## What RemaSol does
+
+- **Merchant Dashboard:** authenticated product creation, shareable checkout links, recent locally verified payment and refund records, all-time totals, and an explicit Devnet refresh action.
+- **Private checkout:** each order receives a unique Solana payment address and a private Merchant Code. A normal checkout does not ask the customer to type an arbitrary refund wallet.
+- **Payment verification:** RemaSol reads the finalized transaction from Solana Devnet and checks the signature, native SOL transfer, receiving address, source address, amount, and order assignment.
+- **Exact amount states:** payments are recorded as exact, underpaid, overpaid, expired, ambiguous, or otherwise needing review. All business amounts use integer lamports.
+- **Test Wallet:** a separate, merchant-controlled Devnet treasury can create a temporary sender and make capped payments only to active RemaSol checkout addresses. Each test operation is durable and owner-scoped.
+- **Guided Recovery:** customers can submit the Merchant Code, the actual sender address, and the payment transaction ID at `/recover`. The refund destination is derived from verified payment data or an internally bound Test Wallet sender; it is not replaced by a claimant-supplied destination.
+- **Durable refunds:** one refund record is reserved per order. Signed transaction bytes and the expected signature are persisted before broadcast, so a repeated request or lost RPC response does not construct a second payout.
+- **Manual review:** unsupported transfer patterns, missing ownership evidence, insufficient balance, failed/uncertain broadcasts, and other unsafe conditions become `needs_review` rather than triggering another transfer.
+
+### Underpayments are identified, not topped up
+
+RemaSol already detects and records an underpaid order and keeps it in a no-refund state. A guided process for paying the outstanding balance, combining multiple transfers, or automatically following up is future work. Automatic top-ups are not an implemented feature.
+
+## The customer and merchant journey
+
+1. Open the [interactive Demo](https://remasol.ddnsfree.com/demo), which explains the flow and links to the demo product, Test Wallet, Recovery, and merchant view.
+2. On the demo product, create a checkout. RemaSol creates a unique payment address and displays the private Merchant Code; save both.
+3. Use [Test Wallet](https://remasol.ddnsfree.com/wallet) to create a temporary sender, enter the checkout address, and choose a bounded Devnet amount. The built-in presets cover 0.001 SOL underpayment, 0.002 SOL exact payment, 0.004 SOL overpayment, and 0.005 SOL maximum overpayment.
+4. RemaSol funds the temporary sender from the dedicated demo treasury and sends the selected amount to the checkout address. Funding and payment operations are capped, rate-limited, and persisted before broadcast.
+5. RemaSol verifies the finalized native SOL transfer and reports the exact price, received amount, and payment state.
+6. For the successful Test Wallet path, open [Recovery](https://remasol.ddnsfree.com/recover), enter the Merchant Code, sender address, and payment signature, then request the eligible excess.
+7. The receipt shows the refund state and available Solana Explorer proof. The [Merchant Dashboard](https://remasol.ddnsfree.com/merchant/login) is authenticated; its login page includes a sanitized preview, while the real console shows database-backed records.
+
+The public `/demo` route is a guide page. `/wallet` is the standalone Test Wallet entry point, and individual wallet tests use explicit owner-scoped `/wallet/test/<session_id>` URLs.
+
+## Verified Solana Devnet example
+
+This is a real end-to-end hosted Devnet example, not only a mocked test:
+
+| Event | Amount |
+| --- | ---: |
+| Product price | **0.002 SOL** |
+| Customer payment | **0.005 SOL** |
+| Verified excess | **0.003 SOL** |
+| Finalized refund | **0.003 SOL** |
+
+- [View the 0.005 SOL payment in Solana Explorer](https://explorer.solana.com/tx/2C1o5fTENTVKq5RQNbrN8FaHjA63mtrJCQh5aKqLbXrEJK8XMuknBT4cAQX1r6gn4xGk2PxQPuKTijiFoN4riref?cluster=devnet)
+- [View the finalized 0.003 SOL refund in Solana Explorer](https://explorer.solana.com/tx/aRmgM5nrseWm16BZqBP9jUgLcJWHgPs8NECinWpHfQdNCbrmJyDHG95BWbKBf1eFHCcEZ35xj7H2GcycsDnYDrS?cluster=devnet)
+
+The payment is a successful 5,000,000-lamport native SOL transfer to the unique checkout address. The refund is a successful 3,000,000-lamport native SOL transfer back to the sender used by the controlled Test Wallet. Both signatures resolve on Solana Devnet with finalized transaction data.
+
+## Why Solana is integral
+
+Solana is the payment, verification, and refund settlement layer here; it is not an extra label on a conventional checkout.
+
+- RemaSol handles real native SOL transfers rather than simulated balances.
+- Solana RPC supplies the transaction signature, source, destination, amount, and finalization state used in payment verification. The customer does not choose the refundable amount from a form field.
+- Small refunds are economically plausible when network fees are low, although merchants still have RPC, hosting, operations, and transaction-fee costs.
+- Payment and refund records have independent, public Explorer proof.
+- Fast settlement does not mean every browser response is immediate. RemaSol stores signed candidates and durable state so a delayed or lost response becomes reconciliation or manual review, not a blind second broadcast.
+
+The prototype uses native SOL transfers and does not require a custom Solana program.
+
+## Safeguards and boundaries
+
+- **Amount integrity:** prices, payments, excesses, limits, and fee buffers are calculated as integer lamports.
+- **Transfer integrity:** only a single straightforward native System Program transfer to the active checkout address is accepted for automatic classification. Ambiguous instruction sets, wrong destinations, invalid signatures, failed transactions, and reused signatures are rejected or sent to review.
+- **Destination integrity:** ordinary public checkout derives the candidate refund destination from the verified transfer source, but it does not claim that a source address proves control of a customer or exchange account. Without a trusted ownership path, automatic refund eligibility remains conservative and the case goes to manual review. The controlled Test Wallet binds its generated sender to the order before payment, which is why the verified demo can use the guided refund path.
+- **Claim protection:** Merchant Codes are generated with `secrets` and stored as salted PBKDF2-HMAC hashes. The code is a bearer credential and should be kept private.
+- **Duplicate-payout protection:** the database enforces one refund per order and unique transaction signatures. `BEGIN IMMEDIATE` reserves the refund atomically; repeated requests reconcile the existing record.
+- **Uncertain broadcasts:** the signed transaction and expected signature are saved before the first broadcast. If the response is lost, RemaSol does not construct another transaction; it moves the operation to `needs_review` or reconciles the saved signature.
+- **Key protection:** application-controlled checkout and demo wallet private keys are encrypted with Fernet before being stored in SQLite. The Fernet key remains environment configuration.
+- **Web protections:** merchant routes use password-hash authentication and sessions; forms use CSRF protection; inputs are bounded and validated; SQL is parameterized; rate limits are enabled per process.
+- **Demo treasury limits:** Test Wallet payments are limited to active RemaSol checkout addresses, a configured per-payment maximum, a daily budget, and concurrent-operation reservations. The treasury is manually funded with Devnet SOL and has no arbitrary public withdrawal endpoint.
+
+These are prototype safeguards, not a security audit or a production custody model. Do not call this project mainnet-ready.
+
+## Architecture
+
+```text
+Browser
+  -> Flask routes, sessions, CSRF, request limits
+  -> PaymentEngine
+       -> SQLite: products, orders, wallet operations, refunds
+       -> SolanaService: Devnet RPC, verification, signing, status
+  -> DemoTreasuryService: capped Test Wallet funding and payments
+```
+
+The refund path is deliberately durable:
+
+1. Verify the Merchant Code, order, signature, amount, destination, and eligibility.
+2. Check the checkout balance and fee buffer.
+3. Sign the exact native SOL refund transaction.
+4. Persist the signed bytes and expected signature inside an atomic reservation.
+5. Broadcast those same bytes.
+6. Reconcile to `submitted`, `finalized`, or `needs_review`.
+
+## Technology
+
+Python 3.11+, Flask, Jinja, SQLite, `solana-py`, `solders`, `cryptography`/Fernet, Werkzeug password hashing, HTML/CSS, lightweight JavaScript, pytest, and Docker/Gunicorn deployment files. No custom Solana program is required for the MVP.
 
 ## Run locally
 
-Python 3.11+ is recommended.
+Requirements: Python 3.11 or newer, a Solana Devnet RPC endpoint, and local environment configuration. Use test SOL only.
 
 ```bash
+git clone https://github.com/dalamaa/Rema-Sol.git
+cd Rema-Sol
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
+```
+
+Generate values for the matching local `.env` variables:
+
+```bash
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-# paste that value into REMA_SOL_WALLET_KEY in .env
 python -c "import secrets; print(secrets.token_urlsafe(32))"
-# paste that value into REMA_SOL_SECRET_KEY in .env
-python -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('choose-a-demo-password'))"
-# paste that value into REMA_SOL_MERCHANT_PASSWORD_HASH in .env
+python -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('choose-a-local-demo-password'))"
+```
+
+Place those values in `REMA_SOL_WALLET_KEY`, `REMA_SOL_SECRET_KEY`, and `REMA_SOL_MERCHANT_PASSWORD_HASH`. Set a local merchant username in `REMA_SOL_MERCHANT_USERNAME`. Keep `.env`, wallet keys, Merchant Codes, and credentials out of Git and logs. The supplied `.env.example` defaults to Solana Devnet and port 5007.
+
+Start the application:
+
+```bash
 python app.py
 ```
 
-Open <http://127.0.0.1:5007>. The local port is configurable with `PORT`; `python app.py` reads it from `.env`. The ebook product is at `/p/the-digital-creator-s-guide`, the Test Wallet entry is at `/wallet` (`/demo` redirects there), individual tests use owner-scoped `/wallet/test/<session_id>` URLs, the merchant console is at `/merchant`, its treasury view is at `/merchant/treasury`, and customer recovery is at `/recover`. The console redirects to `/merchant/login` until the configured merchant username and password hash are supplied.
+Open <http://127.0.0.1:5007>. Useful local routes are `/demo`, `/wallet`, `/recover`, `/merchant/login`, and the seeded demo product at `/p/the-digital-creator-s-guide`. The merchant console requires the configured local credentials. The demo treasury creates its dedicated wallet locally but does not fund itself; log in to `/merchant/treasury`, copy the public address, and fund it manually with Devnet SOL.
 
-For a tracked local process, use the executable root scripts after creating the
-existing `.venv` (or `venv`) and installing the requirements:
+For a tracked local process, after installing the requirements you can also use:
 
 ```bash
 ./start.sh
 ./stop.sh
 ```
 
-`start.sh` runs the project virtual environment when present, loads `.env` through
-the Flask entrypoint, defaults to port 5007, records one RemaSol PID, and refuses
-to start a duplicate app process. `stop.sh` sends `TERM` only to the exact RemaSol
-PID and refuses to act on an unrelated Python process.
+## Tests and verification
 
-The Test Wallet is intentionally bounded: each `New Test` creates an independent temporary sender, each payment is between 0.0005 and 0.005 SOL, recipients must be active RemaSol checkouts, and daily/concurrent treasury allocations are reserved atomically. Presets cover 0.001 SOL underpayment, 0.002 SOL exact payment, 0.004 SOL overpayment, and 0.005 SOL maximum overpayment. The maximum is per payment, not a cumulative visitor credit. Idle, failed, and completed wallet sessions do not consume an operation slot; unresolved signed transfers remain reserved until reconciled. The `/wallet` entry page never restores a saved test from a browser cookie, and individual tests are selected by owner-scoped URL. The wallet does not create a checkout or expose checkout credentials. The dedicated treasury is created locally with an encrypted private key and is never funded automatically. After logging in, copy its public address from `/merchant/treasury` and use the Solana Devnet faucet or a separate Devnet wallet to fund it manually. Never use mainnet funds.
-
-The merchant dashboard is database-backed on normal GET requests and shows recent locally verified payment and refund records with all-time totals. Use `Refresh payments` for an explicit Solana Devnet synchronization; it does not run automatically when the dashboard opens.
-
-## Test
+Run the automated suite:
 
 ```bash
 pytest -q
 ```
 
-The tests use a fake Solana service. They intentionally do not claim that a live Devnet payment succeeded.
+At this documentation pass, the result is **68 passed**. The tests use a fake Solana service for repeatable verification, concurrency, security, and failure-injection cases; they do not claim that a live Devnet transaction succeeded. Python compilation also passes with:
 
-## Architecture
-
-```text
-Browser
-  -> Flask routes + CSRF + rate limits
-  -> PaymentEngine
-       -> SQLite (products, orders, refunds)
-       -> SolanaService (Devnet RPC, wallet generation, verification, signing)
-  -> DemoTreasuryService (dedicated treasury, temporary buyer wallets, demo reservations)
+```bash
+python -m compileall -q app.py remasol tests
 ```
 
-Checkout private keys are encrypted with Fernet before they are written to SQLite. The Fernet key is environment configuration, not a database value. This is suitable for a local hackathon demo; production would need a managed KMS/HSM, operational key rotation, stronger observability, authenticated merchant access, and a carefully reviewed custody model.
+The two Explorer links above are the separate evidence for the real hosted Devnet payment and refund.
 
-The Test Wallet has a separate treasury boundary. A wallet attempt persists its funding and payment signed bytes plus expected signatures before broadcasting. Retries inspect those durable candidates and finalized status instead of constructing a second transfer. The wallet service only sends to a generated active checkout destination; it has no arbitrary recipient or withdrawal endpoint and does not move funds from existing customer wallets.
+## Limitations and future work
 
-The refund flow is deliberately durable:
+RemaSol is intentionally a Devnet hackathon prototype. Before handling real mainnet funds, it would need at least:
 
-1. Verify the claim, order, transaction, amount, and sender-bound destination.
-2. Check the checkout wallet balance.
-3. Sign the exact refund transaction.
-4. Persist the signed bytes and expected signature inside an atomic refund reservation.
-5. Broadcast those same bytes.
-6. Move to `submitted`, `finalized`, or `needs_review`.
+- managed key custody/KMS or HSM, key rotation, and an independently audited transaction-building path;
+- a formal threat model, stronger merchant identity/SSO, policy controls, monitoring, alerting, and centralized audit logs;
+- a durable distributed rate limiter and background reconciliation workers;
+- operator tooling for manual review, failed/uncertain payments, exchange-specific cases, and treasury/liability accounting;
+- clearer production custody and refund policies, operational runbooks, and independent security review;
+- a guided underpayment balance-payment flow, if that product direction is retained.
 
-If a broadcast response is lost, the signed transaction remains the only payout candidate. A repeat request reads the existing refund record; it does not create a new transaction.
+Uncertain Solana outcomes intentionally stop at `needs_review`. The current merchant login is suitable for a controlled demo, not a complete identity system. Self-hosting also does not mean zero operating costs.
 
-## Exchange payments and limitations
+## AI-assisted development
 
-An exchange withdrawal may come from an exchange-controlled hot wallet. RemaSol reads the actual source account from the native transfer, but it does not claim that source belongs to the customer and does not automatically refund to it. Ordinary payments without suitable sender-ownership proof go to manual review instead. Some exchanges require special deposit procedures, so a finalized Solana transaction does not guarantee that an exchange account credits it.
+Development used AI-assisted coding tools, including Codex, alongside local source review, automated tests, mocked Solana RPC tests, and real read-only verification of the documented Devnet transactions. The acknowledgment does not change the project’s prototype status or substitute for security review.
 
-Before mainnet use, add a production key-management system, a durable distributed limiter, monitoring and reconciliation workers, explicit treasury/liability accounting, manual review tooling, policy controls, a formal threat model, and an audited transaction-building path. The MVP merchant login is suitable for a controlled demo, not a complete production identity system. Do not call this MVP production-ready.
+## Repository map
 
-Guided underpayment resolution is future work. The current MVP can classify and record an underpayment, but it does not guide a customer through a top-up, combine multiple transfers, or create an automatic follow-up payment.
+- `app.py` — Flask entry point.
+- `remasol/services.py` — checkout verification, lamport calculations, durable refund logic.
+- `remasol/demo.py` — capped Test Wallet and demo treasury operations.
+- `remasol/solana_service.py` — Solana Devnet RPC, native transfer verification, signing, and status.
+- `remasol/db.py` — SQLite schema and migrations.
+- `remasol/templates/` and `remasol/static/` — merchant/customer UI.
+- `tests/` — automated behavior, safety, concurrency, and frontend regression tests.
+- `deploy/` — Docker/Gunicorn/systemd/Nginx deployment notes for the hosted prototype.
 
-## VPS deployment
-
-The repository includes a Gunicorn systemd unit, Nginx HTTPS reverse-proxy configuration, and a deployment checklist in [`deploy/README.md`](deploy/README.md). The service binds only to `127.0.0.1`, stores SQLite under `/var/lib/remasol`, loads secrets from `/etc/remasol/remasol.env`, enables secure cookies, and trusts forwarded client identity only when `REMA_SOL_TRUST_PROXY=1` is set behind Nginx.
-
-## Files
-
-- `app.py` — Flask entrypoint.
-- `remasol/services.py` — payment, verification, idempotent refund, and lamport business logic.
-- `remasol/solana_service.py` — Solana Devnet adapter.
-- `remasol/db.py` — SQLite schema and transactions.
-- `remasol/templates/` and `remasol/static/` — responsive merchant/customer UI.
-- `tests/` — mocked RPC and concurrency/security tests.
-- `SECURITY_TEST_RESULTS.md` — controlled abuse-test evidence and remaining limitations.
-- `DEMO_SCRIPT.md` — hackathon demonstration sequence.
-- `HACKATHON_SUBMISSION.md` — submission-ready story and boundaries.
-- `deploy/` — VPS deployment configuration and HTTPS checklist.
+**RemaSol. Keep the payment. Return the extra.**
