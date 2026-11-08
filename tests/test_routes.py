@@ -169,7 +169,7 @@ def test_customer_flow_creates_a_payment_only_checkout(client, product):
     assert order["refund_destination_mode"] == "none"
 
 
-def test_exchange_refund_guidance_is_visible_before_recovery_action(client, product):
+def test_exchange_refund_guidance_remains_visible_on_recovery(client, product):
     token = csrf(client)
     checkout = client.post(
         f"/p/{product['slug']}/checkout",
@@ -185,7 +185,7 @@ def test_exchange_refund_guidance_is_visible_before_recovery_action(client, prod
     assert "If you sent SOL from an exchange like Binance or another wallet you don't control" in recovery
     assert "We'll need to review the payment before we send anything back." in recovery
     assert "Exchange withdrawal note" not in recovery
-    assert recovery.index("Paid from an exchange?") < recovery.index("Check eligibility")
+    assert recovery.index("Check eligibility") < recovery.index("Paid from an exchange?")
 
 
 def test_recovery_result_is_first_and_keeps_correction_form(client, engine, product, fake_solana):
@@ -556,6 +556,11 @@ def test_test_wallet_fetch_returns_json_without_navigation(client, app, engine, 
     assert payload["wallet"]["payment_signature"] == "transfer-signature-2"
     assert "funding_signature" not in payload["wallet"]
     assert fake_solana.broadcast_calls == 2
+
+    confirmation = client.get(created.location).get_data(as_text=True)
+    for detail in ("Payment confirmed", "Actual sender", "Recipient", "Amount", "Transaction ID", "Open on Solana Explorer"):
+        assert detail in confirmation
+    assert "Check overpayment / request refund" not in confirmation
 
 
 def test_test_wallet_fetch_recheck_uses_saved_payment_without_broadcast(client, engine, product, fake_solana):

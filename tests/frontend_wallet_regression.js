@@ -256,6 +256,7 @@ async function main() {
   assert.equal(fixture.form.submitButton.hidden, true);
   assert.equal(fixture.form.dataset.walletRequestBusy, "false");
   assert.doesNotMatch(fixture.resultPanel.textContent, /Payment in progress|Processing/);
+  assert.doesNotMatch(fixture.resultPanel.textContent, /Check overpayment|request refund/);
   console.log("frontend wallet success regression: passed");
 }
 

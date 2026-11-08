@@ -10,7 +10,6 @@
   <div class="recovery-seal">{{ icon('shield', 26) }}<span>Public proof<br><strong>Private access</strong></span></div>
 </section>
 
-<section class="warning-band section-wrap recovery-warning-top"><div class="warning-icon">{{ icon('alert', 18) }}</div><div><strong>Paid from an exchange?</strong><p>If you sent SOL from an exchange like Binance or another wallet you don't control, a refund to the same address might not reach you. We'll need to review the payment before we send anything back.</p></div></section>
 {% endif %}
 
 <section class="recovery-grid{% if state %} recovery-grid-results{% endif %} section-wrap">
@@ -66,5 +65,6 @@
     {% endif %}
   </div>
 </section>
+{% if not state %}<section class="warning-band section-wrap recovery-warning-bottom"><div class="warning-icon">{{ icon('alert', 18) }}</div><div><strong>Paid from an exchange?</strong><p>If you sent SOL from an exchange like Binance or another wallet you don't control, a refund to the same address might not reach you. We'll need to review the payment before we send anything back.</p></div></section>{% endif %}
 {% if state %}<section class="warning-band section-wrap recovery-warning-bottom"><div class="warning-icon">{{ icon('alert', 18) }}</div><div><strong>Paid from an exchange?</strong><p>If you sent SOL from an exchange like Binance or another wallet you don't control, a refund to the same address might not reach you. We'll need to review the payment before we send anything back.</p></div></section>{% endif %}
 {% endblock %}

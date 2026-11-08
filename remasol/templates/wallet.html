@@ -51,7 +51,7 @@
     </div>
 
     <aside class="wallet-result-column">
-      <div class="panel wallet-result-card" aria-live="polite" aria-atomic="true" tabindex="-1" data-wallet-result data-wallet-status="{{ wallet.status }}" data-new-test-action="{{ url_for('main.create_test_wallet') }}" data-recheck-action="{{ url_for('main.recheck_test_wallet_payment') }}" data-recovery-action="{{ url_for('main.recover') }}" data-csrf-token="{{ csrf_token }}">
+      <div class="panel wallet-result-card" aria-live="polite" aria-atomic="true" tabindex="-1" data-wallet-result data-wallet-status="{{ wallet.status }}" data-new-test-action="{{ url_for('main.create_test_wallet') }}" data-recheck-action="{{ url_for('main.recheck_test_wallet_payment') }}" data-csrf-token="{{ csrf_token }}">
         <div class="panel-kicker">Payment result</div>
         {% if wallet.status != 'created' or wallet.payment_signature %}
           <div class="demo-result-icon {{ 'success' if wallet.status == 'complete' else 'pending processing' if wallet.status in processing_statuses else 'failed' if wallet.status == 'failed' else 'review' }}" aria-hidden="true">{% if wallet.status in processing_statuses %}<span class="wallet-processing-spinner"></span>{% else %}{{ icon('check' if wallet.status == 'complete' else 'alert', 21) }}{% endif %}</div>
@@ -64,7 +64,7 @@
             <div><span>Transaction ID</span><code>{{ wallet.payment_signature }}</code><button type="button" class="copy-button" data-copy="{{ wallet.payment_signature }}" aria-label="Copy transaction ID">{{ icon('copy', 14) }} Copy</button></div>
           </div>
           <a class="button button-quiet button-full" href="https://explorer.solana.com/tx/{{ wallet.payment_signature }}?cluster=devnet" target="_blank" rel="noreferrer">Open on Solana Explorer {{ icon('external', 14) }}</a>{% elif wallet.last_error %}<div class="wallet-result-message">{{ wallet.last_error }}</div>{% endif %}
-          {% if wallet.status == 'complete' %}<a class="button button-primary button-full" href="{{ url_for('main.recover') }}">Check overpayment / request refund {{ icon('arrow-right', 14) }}</a>{% elif wallet.status == 'failed' %}<form method="post" action="{{ url_for('main.create_test_wallet') }}" data-loading-text="Creating Test Wallet…"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="button button-primary button-full" type="submit">Create Test Wallet {{ icon('arrow-right', 14) }}</button></form>{% endif %}
+          {% if wallet.status == 'failed' %}<form method="post" action="{{ url_for('main.create_test_wallet') }}" data-loading-text="Creating Test Wallet…"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="button button-primary button-full" type="submit">Create Test Wallet {{ icon('arrow-right', 14) }}</button></form>{% endif %}
           {% if wallet.status == 'needs_review' and (wallet.funding_signature or wallet.payment_signature) %}<form method="post" action="{{ url_for('main.recheck_test_wallet_payment') }}" data-wallet-recheck><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="session_id" value="{{ wallet.id }}"><button class="button button-primary button-full" type="submit">Recheck Saved Operation {{ icon('refresh', 14) }}</button></form>{% endif %}
         {% else %}
           <div class="demo-result-placeholder"><div class="placeholder-orbit">{{ icon('wallet', 23) }}</div><h2>Your transaction will appear here.</h2><p>Paste the checkout address, choose 0.005 SOL, and send to see the payment result.</p></div>

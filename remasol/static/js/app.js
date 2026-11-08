@@ -246,11 +246,7 @@
       resultPanel.appendChild(make("div", "wallet-result-message", wallet?.last_error || payload.error));
     }
 
-    if (confirmed) {
-      const recovery = make("a", "button button-primary button-full", "Check overpayment / request refund");
-      recovery.href = resultPanel.dataset.recoveryAction;
-      resultPanel.appendChild(recovery);
-    } else if (failed) {
+    if (failed) {
       resultPanel.appendChild(actionForm(resultPanel.dataset.newTestAction, csrfToken, "", "New Test"));
     }
     if (needsReview && sessionId) {
