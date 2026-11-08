@@ -1,20 +1,20 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="recovery-hero section-wrap">
+<section class="recovery-hero{% if state %} recovery-hero-results{% endif %} section-wrap">
   <div>
-    <div class="eyebrow"><span class="eyebrow-line"></span> Self-service recovery</div>
-    <h1>Check whether your overpayment can be recovered.</h1>
-    <p>Enter the Merchant Code from checkout, the sender wallet used for payment, and the payment transaction ID. RemaSol verifies all three on Solana before showing the exact excess. Eligible payments can continue to a locked refund destination; uncertain payments go to manual review.</p>
+    <div class="eyebrow"><span class="eyebrow-line"></span> {% if state %}Recovery result{% else %}Self-service recovery{% endif %}</div>
+    <h1>{% if state %}Payment recovery check{% else %}Check whether your overpayment can be recovered.{% endif %}</h1>
+    <p>{% if state %}Review the result below. Update any detail in the form if you need to correct the check.{% else %}Enter the Merchant Code from checkout, the sender wallet used for payment, and the payment transaction ID. RemaSol verifies all three before showing the exact excess.{% endif %}</p>
   </div>
-  <div class="recovery-seal">{{ icon('shield', 26) }}<span>Public proof<br><strong>Private access</strong></span></div>
+  {% if not state %}<div class="recovery-seal">{{ icon('shield', 26) }}<span>Public proof<br><strong>Private access</strong></span></div>{% endif %}
 </section>
 
-<section class="warning-band section-wrap recovery-warning-top"><div class="warning-icon">{{ icon('alert', 18) }}</div><div><strong>Exchange withdrawal note</strong><p>RemaSol can verify the on-chain transfer, but cannot guarantee that an exchange credits a refund. Exchange-origin or otherwise uncertain payments may require manual review.</p></div></section>
+{% if not state %}<section class="warning-band section-wrap recovery-warning-top"><div class="warning-icon">{{ icon('alert', 18) }}</div><div><strong>Paid from an exchange?</strong><p>If you sent SOL from an exchange like Binance or another wallet you don't control, a refund to the same address might not reach you. We'll need to review the payment before we send anything back.</p></div></section>{% endif %}
 
-<section class="recovery-grid section-wrap">
+<section class="recovery-grid{% if state %} recovery-grid-results{% endif %} section-wrap">
   <div class="panel recovery-form-panel">
     <div class="panel-heading"><div><span class="panel-kicker">Check eligibility</span><h2>Find your payment</h2></div><span class="step-count">1</span></div>
-    <p class="card-lede">Paste the three values from the checkout and Test Wallet. Recovery checks the Merchant Code, sender wallet, and finalized Solana transaction together. The refund destination is locked and cannot be edited here.</p>
+    <p class="card-lede">Paste the Merchant Code, sender wallet, and finalized transaction ID. The refund destination is locked after verification.</p>
     <form method="post" action="{{ url_for('main.check_recovery') }}" class="stack-form" data-loading-text="Checking eligibility…">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <label>Merchant Code<input type="password" name="merchant_code" value="{{ merchant_code or '' }}" placeholder="Paste the private code from checkout" autocomplete="off" spellcheck="false" required></label>
@@ -24,7 +24,7 @@
     </form>
     <div class="security-list"><div>{{ icon('lock', 15) }} Claim code is checked against this specific checkout.</div><div>{{ icon('database', 15) }} Refund amount comes from the verified transfer, not the form.</div></div>
   </div>
-  <div class="recovery-result" aria-live="polite">
+  <div class="recovery-result{% if state %} recovery-result-state{% endif %}" aria-live="polite">
     {% if state %}
       <div class="result-header result-{{ state }}"><span class="state-icon">{{ icon('check' if state in ['eligible', 'finalized'] else 'clock' if state in ['submitted', 'refund_processing'] else 'alert', 20) }}</span><div><span class="panel-kicker">Payment status</span><h2>{{ state|status_label }}</h2></div></div>
       <p class="result-message">{{ message }}</p>
@@ -32,15 +32,22 @@
         <div class="eligibility-amount"><span>Refundable excess</span><strong>{{ order.excess_sol }} <small>SOL</small></strong><div>Product price {{ order.price_sol }} SOL · received {{ order.payment_sol }} SOL</div></div>
         <div class="locked-destination result-destination"><span class="destination-icon">{{ icon('lock', 15) }}</span><div><span>Returning to locked destination</span><code>{{ order.refund_destination }}</code></div></div>
         <form method="post" action="{{ url_for('main.request_recovery') }}" class="request-form" data-loading-text="Submitting one refund…"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="merchant_code" value="{{ merchant_code }}"><input type="hidden" name="sender_address" value="{{ sender_address }}"><input type="hidden" name="signature" value="{{ signature }}"><button class="button button-gold button-full" type="submit">Request {{ order.excess_sol }} SOL refund {{ icon('arrow-right', 16) }}</button></form>
-        <p class="action-note">The amount is fixed by the verified excess. One request creates one refund record; uncertain outcomes stay in review.</p>
-      {% elif order and state in ['submitted', 'finalized', 'needs_review'] %}
+        <p class="action-note">The amount is fixed by the verified excess. One request creates one refund record.</p>
+      {% elif order and state in ['submitted', 'finalized', 'refund_processing'] %}
+        <div class="status-summary"><div><span>Refund amount</span><strong>{{ order.refund_amount_lamports|sol }} SOL</strong></div><div><span>Destination</span><code>{{ order.refund_destination|short }}</code></div>{% if order.transaction_signature %}<div><span>Transaction</span><a href="https://explorer.solana.com/tx/{{ order.transaction_signature }}?cluster=devnet" target="_blank" rel="noreferrer">{{ order.transaction_signature|short }} {{ icon('external', 13) }}</a></div>{% endif %}</div>
+      {% elif order and state == 'needs_review' and order.refund_id %}
         <div class="status-summary"><div><span>Refund amount</span><strong>{{ order.refund_amount_lamports|sol }} SOL</strong></div><div><span>Destination</span><code>{{ order.refund_destination|short }}</code></div>{% if order.transaction_signature %}<div><span>Transaction</span><a href="https://explorer.solana.com/tx/{{ order.transaction_signature }}?cluster=devnet" target="_blank" rel="noreferrer">{{ order.transaction_signature|short }} {{ icon('external', 13) }}</a></div>{% endif %}</div>
       {% elif order and state == 'underpaid' %}
         <div class="not-eligible-box"><span>{{ icon('info', 17) }}</span><div><strong>{{ order.payment_sol }} SOL received</strong><p>No automatic top-up or refund was created.</p></div></div>
+      {% elif order and state == 'exact' %}
+        <div class="not-eligible-box"><span>{{ icon('info', 17) }}</span><div><strong>{{ order.payment_sol }} SOL received</strong><p>This matches the product price. No excess or refund is due.</p></div></div>
+      {% elif state in ['needs_review', 'not_eligible'] %}
+        <div class="not-eligible-box"><span>{{ icon('alert', 17) }}</span><div><strong>{% if state == 'needs_review' %}Manual review required{% else %}Not eligible{% endif %}</strong><p>{% if state == 'needs_review' %}{% if order and order.payment_lamports is not none %}{{ order.payment_sol }} SOL received. {% endif %}No new payout request was created. Correct the details below or wait for review.{% else %}Check the details below and try again if needed.{% endif %}</p></div></div>
       {% endif %}
     {% else %}
       <div class="result-placeholder"><div class="placeholder-orbit">{{ icon('shield', 25) }}</div><h2>Eligibility will appear here.</h2><p>RemaSol will show the exact product price, verified payment, refundable excess, and locked destination only after authorization.</p><div class="placeholder-rule"><span></span><span></span><span></span></div></div>
     {% endif %}
   </div>
 </section>
+{% if state %}<section class="warning-band section-wrap recovery-warning-bottom"><div class="warning-icon">{{ icon('alert', 18) }}</div><div><strong>Paid from an exchange?</strong><p>If you sent SOL from an exchange like Binance or another wallet you don't control, a refund to the same address might not reach you. We'll need to review the payment before we send anything back.</p></div></section>{% endif %}
 {% endblock %}

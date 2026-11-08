@@ -247,7 +247,7 @@
     }
 
     if (confirmed) {
-      const recovery = make("a", "button button-primary button-full", "Open Recovery");
+      const recovery = make("a", "button button-primary button-full", "Check overpayment / request refund");
       recovery.href = resultPanel.dataset.recoveryAction;
       resultPanel.appendChild(recovery);
     } else if (failed) {

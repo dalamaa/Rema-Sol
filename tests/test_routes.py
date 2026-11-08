@@ -29,7 +29,11 @@ def login(client):
 def test_home_and_merchant_pages_render(client):
     assert client.get("/").status_code == 200
     assert client.get("/merchant").status_code == 302
-    assert client.get("/merchant/login").status_code == 200
+    login_page = client.get("/merchant/login")
+    assert login_page.status_code == 200
+    login_html = login_page.get_data(as_text=True)
+    assert "Preview merchant dashboard" in login_html
+    assert "/static/img/merchant-dashboard-preview.png" in login_html
     login(client)
     assert client.get("/merchant").status_code == 200
 
@@ -176,9 +180,11 @@ def test_exchange_refund_guidance_is_visible_before_recovery_action(client, prod
     assert checkout.index("payment-refund-note") < checkout.index("payment-actions")
 
     recovery = client.get("/recover").get_data(as_text=True)
-    assert "cannot guarantee that an exchange credits a refund" in recovery
-    assert "Exchange-origin or otherwise uncertain payments may require manual review." in recovery
-    assert recovery.index("Exchange withdrawal note") < recovery.index("Check eligibility")
+    assert "Paid from an exchange?" in recovery
+    assert "If you sent SOL from an exchange like Binance or another wallet you don't control" in recovery
+    assert "We'll need to review the payment before we send anything back." in recovery
+    assert "Exchange withdrawal note" not in recovery
+    assert recovery.index("Paid from an exchange?") < recovery.index("Check eligibility")
 
 
 def test_each_customer_checkout_gets_unique_address_and_merchant_code(client, product):
@@ -224,7 +230,9 @@ def test_checkout_refresh_preserves_credentials_and_compact_payment_layout(clien
     assert refreshed.status_code == 200
     assert refreshed_address == address
     assert refreshed_merchant_code == merchant_code
-    assert f"solana:{address}?amount={product['price_sol']}" in refreshed_html
+    assert "Pay with Solana Pay" not in refreshed_html
+    assert "solana:" not in refreshed_html
+    assert "Test payment on Solana Devnet" in refreshed_html
     assert "Payment details" in refreshed_html
     assert "Everything you need to pay" not in refreshed_html
     assert "payment-instructions" not in refreshed_html
