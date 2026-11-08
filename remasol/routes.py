@@ -132,6 +132,14 @@ def wallet_maintenance_response(session_id: str, wants_json: bool):
     ), 503
 
 
+def wallet_operation_is_paused(session_id: str) -> bool:
+    """Keep maintenance global while permitting one explicitly selected canary."""
+    if not current_app.config.get("WALLET_OPERATIONS_PAUSED", False):
+        return False
+    allowed = current_app.config.get("WALLET_OPERATION_ALLOWED_SESSION_ID", "")
+    return not allowed or not secrets.compare_digest(allowed, session_id)
+
+
 @bp.app_template_filter("sol")
 def sol_filter(value):
     return sol_from_lamports(value)
@@ -443,7 +451,7 @@ def send_test_wallet_payment():
             error="Open a New Test before sending test SOL.",
             **template_context(),
         ), 400
-    if current_app.config.get("WALLET_OPERATIONS_PAUSED", False):
+    if wallet_operation_is_paused(requested_session_id):
         return wallet_maintenance_response(requested_session_id, wants_json)
     if not limiter().allow(f"wallet-send:{client_ip()}", 20):
         state = demo_service().wallet_page_state(
@@ -501,7 +509,7 @@ def recheck_test_wallet_payment():
             error="Open a saved Test Wallet session before checking payment status.",
             **template_context(),
         ), 400
-    if current_app.config.get("WALLET_OPERATIONS_PAUSED", False):
+    if wallet_operation_is_paused(requested_session_id):
         return wallet_maintenance_response(requested_session_id, wants_json)
     if not limiter().allow(f"wallet-recheck:{client_ip()}", 20):
         state = demo_service().wallet_page_state(

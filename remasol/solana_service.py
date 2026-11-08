@@ -295,7 +295,10 @@ class SolanaService:
     def signature_status(self, signature: str) -> str:
         self._require_sdk()
         try:
-            response = self.client.get_signature_statuses([self.Signature.from_string(signature)])
+            response = self.client.get_signature_statuses(
+                [self.Signature.from_string(signature)],
+                search_transaction_history=True,
+            )
             result = self._find_result(response) or {}
             values = result.get("value", []) if isinstance(result, dict) else []
             status = values[0] if values else None

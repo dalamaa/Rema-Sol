@@ -33,6 +33,9 @@ def create_app(test_config: dict | None = None) -> Flask:
             "REMA_SOL_WALLET_OPERATIONS_PAUSED", "0"
         )
         == "1",
+        WALLET_OPERATION_ALLOWED_SESSION_ID=os.environ.get(
+            "REMA_SOL_WALLET_ALLOWED_SESSION_ID", ""
+        ).strip(),
         CHECKOUT_EXPIRY_MINUTES=int(os.environ.get("CHECKOUT_EXPIRY_MINUTES", "60")),
         MAX_UNPAID_CHECKOUTS_PER_IP=int(os.environ.get("MAX_UNPAID_CHECKOUTS_PER_IP", "8")),
         REFUND_FEE_BUFFER_LAMPORTS=int(os.environ.get("REFUND_FEE_BUFFER_LAMPORTS", "10000")),

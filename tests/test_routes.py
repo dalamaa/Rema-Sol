@@ -350,6 +350,41 @@ def test_wallet_maintenance_guard_blocks_send_and_recheck_without_broadcast(
     assert fake_solana.broadcast_calls == 0
 
 
+def test_wallet_maintenance_guard_allows_only_selected_canary(
+    client, app, engine, product, fake_solana
+):
+    token = csrf(client)
+    created = client.post("/wallet/create", data={"csrf_token": token})
+    session_id = created.location.rsplit("/", 1)[-1]
+    order, _claim_code = engine.create_order_draft(product["slug"], "127.0.0.1")
+    app.config.update(
+        WALLET_OPERATIONS_PAUSED=True,
+        WALLET_OPERATION_ALLOWED_SESSION_ID=session_id,
+    )
+
+    sent = client.post(
+        "/wallet/send",
+        data={
+            "csrf_token": token,
+            "session_id": session_id,
+            "recipient_address": order["payment_address"],
+            "amount": "0.005",
+        },
+        headers={"X-Requested-With": "fetch"},
+    )
+    blocked = client.post(
+        "/wallet/recheck",
+        data={"csrf_token": token, "session_id": "different-session"},
+        headers={"X-Requested-With": "fetch"},
+    )
+
+    assert sent.status_code == 200
+    assert sent.get_json()["status"] == "complete"
+    assert fake_solana.broadcast_calls == 2
+    assert blocked.status_code == 503
+    assert blocked.get_json()["wallet"] is None
+
+
 def test_test_wallet_never_overwrites_a_locked_refund_destination(
     client, app, engine, product, fake_solana
 ):
