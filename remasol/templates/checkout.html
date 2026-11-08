@@ -27,7 +27,7 @@
         </div>
       </div>
 
-      <p class="payment-refund-note checkout-refund-note" role="note">Running the public demo? Keep this page open, then open Test Wallet and paste this unique payment address. For easier refunds, pay from a Solana wallet you control. Unverified or exchange-origin overpayments may require manual review.</p>
+      <p class="payment-refund-note checkout-refund-note" role="note">Send SOL to the unique address shown here. Save the private Merchant Code before leaving this checkout. For easier refunds, pay from a Solana wallet you control. Unverified or exchange-origin overpayments may require manual review.</p>
     </main>
 
     <aside class="checkout-side">
@@ -53,7 +53,6 @@
         {% endif %}
 
         <div class="payment-actions">
-          <a class="button button-primary" href="{{ url_for('main.test_wallet') }}" target="_blank" rel="noopener noreferrer">Open Test Wallet {{ icon('arrow-up-right', 14) }}</a>
           <a class="button button-quiet" href="solana:{{ order.payment_address }}?amount={{ order.price_sol }}">{{ icon('wallet', 16) }} Pay with Solana Pay</a>
           <span class="payment-network">{{ icon('shield', 14) }} Solana Devnet · native SOL</span>
         </div>

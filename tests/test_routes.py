@@ -132,6 +132,7 @@ def test_product_and_checkout_route_render(app, client, engine, product, fake_so
 
 
 def test_customer_flow_creates_a_payment_only_checkout(client, product):
+    assert client.get("/merchant").status_code == 302
     token = csrf(client)
     product_page = client.get(f"/p/{product['slug']}")
     product_html = product_page.get_data(as_text=True)
@@ -148,6 +149,9 @@ def test_customer_flow_creates_a_payment_only_checkout(client, product):
     assert "Private Merchant Code" in checkout_html
     assert "Copy Address" in checkout_html
     assert "Solana Devnet" in checkout_html
+    assert product["price_sol"] in checkout_html
+    assert "Open Test Wallet" not in checkout_html
+    assert 'href="/wallet"' not in checkout_html
     assert "Refund protection" not in checkout_html
     assert "Protect against overpayment" not in checkout_html
     assert "Payment confirmation" not in checkout_html
@@ -167,7 +171,7 @@ def test_exchange_refund_guidance_is_visible_before_recovery_action(client, prod
         data={"csrf_token": token},
         follow_redirects=True,
     ).get_data(as_text=True)
-    exchange_note = "Running the public demo? Keep this page open, then open Test Wallet"
+    exchange_note = "Send SOL to the unique address shown here."
     assert exchange_note in checkout
     assert checkout.index("payment-refund-note") < checkout.index("payment-actions")
 
@@ -228,11 +232,31 @@ def test_checkout_refresh_preserves_credentials_and_compact_payment_layout(clien
         assert session["checkout_access"] == order_id
 
 
+def test_checkout_details_remain_private_to_the_customer_session(client, product):
+    token = csrf(client)
+    checkout = client.post(
+        f"/p/{product['slug']}/checkout",
+        data={"csrf_token": token},
+        follow_redirects=True,
+    )
+    checkout_html = checkout.get_data(as_text=True)
+    merchant_code = re.search(r'<div class="claim-code" data-copy="([^"]+)">', checkout_html).group(1)
+
+    fresh_client = client.application.test_client()
+    denied = fresh_client.get(checkout.request.path)
+
+    assert denied.status_code == 403
+    assert merchant_code not in denied.get_data(as_text=True)
+
+
 def test_test_wallet_is_separate_and_only_sends_to_active_checkouts(client, app, engine, product, fake_solana):
     token = csrf(client)
     demo_page = client.get("/demo")
     assert demo_page.status_code == 200
-    assert "A customer pays too much SOL. See how RemaSol handles the refund." in demo_page.get_data(as_text=True)
+    demo_html = demo_page.get_data(as_text=True)
+    assert "A customer pays too much SOL. See how RemaSol handles the refund." in demo_html
+    assert 'href="/wallet"' in demo_html
+    assert 'href="/recover"' in demo_html
     assert "Merchant Code" not in client.get("/wallet").get_data(as_text=True)
 
     created = client.post("/wallet/create", data={"csrf_token": token})
