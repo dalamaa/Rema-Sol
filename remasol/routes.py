@@ -119,6 +119,19 @@ def wallet_json_response(wallet: dict | None, *, error: str | None = None, statu
     ), status_code
 
 
+def wallet_maintenance_response(session_id: str, wants_json: bool):
+    """Stop state-changing wallet work while preserving owner-scoped status."""
+    state = demo_service().wallet_page_state(
+        wallet_browser_id(), session_id, include_terminal=True
+    )
+    error = "Test Wallet operations are temporarily paused for maintenance."
+    if wants_json:
+        return wallet_json_response(state.get("wallet"), error=error, status_code=503)
+    return render_template(
+        "wallet.html", **state, error=error, **template_context()
+    ), 503
+
+
 @bp.app_template_filter("sol")
 def sol_filter(value):
     return sol_from_lamports(value)
@@ -430,6 +443,8 @@ def send_test_wallet_payment():
             error="Open a New Test before sending test SOL.",
             **template_context(),
         ), 400
+    if current_app.config.get("WALLET_OPERATIONS_PAUSED", False):
+        return wallet_maintenance_response(requested_session_id, wants_json)
     if not limiter().allow(f"wallet-send:{client_ip()}", 20):
         state = demo_service().wallet_page_state(
             wallet_browser_id(), requested_session_id, include_terminal=True
@@ -486,6 +501,8 @@ def recheck_test_wallet_payment():
             error="Open a saved Test Wallet session before checking payment status.",
             **template_context(),
         ), 400
+    if current_app.config.get("WALLET_OPERATIONS_PAUSED", False):
+        return wallet_maintenance_response(requested_session_id, wants_json)
     if not limiter().allow(f"wallet-recheck:{client_ip()}", 20):
         state = demo_service().wallet_page_state(
             wallet_browser_id(), requested_session_id, include_terminal=True

@@ -29,6 +29,10 @@ def create_app(test_config: dict | None = None) -> Flask:
         WALLET_ENCRYPTION_KEY=os.environ.get("REMA_SOL_WALLET_KEY", ""),
         SOLANA_RPC_URL=os.environ.get("SOLANA_RPC_URL", "https://api.devnet.solana.com"),
         RATE_LIMIT_ENABLED=os.environ.get("RATE_LIMIT_ENABLED", "1") == "1",
+        WALLET_OPERATIONS_PAUSED=os.environ.get(
+            "REMA_SOL_WALLET_OPERATIONS_PAUSED", "0"
+        )
+        == "1",
         CHECKOUT_EXPIRY_MINUTES=int(os.environ.get("CHECKOUT_EXPIRY_MINUTES", "60")),
         MAX_UNPAID_CHECKOUTS_PER_IP=int(os.environ.get("MAX_UNPAID_CHECKOUTS_PER_IP", "8")),
         REFUND_FEE_BUFFER_LAMPORTS=int(os.environ.get("REFUND_FEE_BUFFER_LAMPORTS", "10000")),

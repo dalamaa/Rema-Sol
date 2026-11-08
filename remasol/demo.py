@@ -768,10 +768,16 @@ class DemoTreasuryService:
         finally:
             connection.close()
 
-    def _save_wallet_transfer(self, wallet_id: str, kind: str, preparation: RefundPreparation):
+    def _save_wallet_transfer(
+        self, wallet_id: str, kind: str, preparation: RefundPreparation
+    ) -> bool:
+        """Persist exactly one signed candidate before any broadcast."""
+        if kind not in {"funding", "payment"}:
+            raise ValueError("Unsupported wallet transfer kind")
         connection = self._connection()
         try:
-            connection.execute(
+            begin_immediate(connection)
+            cursor = connection.execute(
                 f"""UPDATE wallet_sessions SET {kind}_signed_transaction = ?, {kind}_signature = ?,
                 status = ?, updated_at = ? WHERE id = ? AND {kind}_signature IS NULL""",
                 (
@@ -782,6 +788,66 @@ class DemoTreasuryService:
                     wallet_id,
                 ),
             )
+            commit(connection)
+            return cursor.rowcount == 1
+        except Exception:
+            rollback(connection)
+            raise
+        finally:
+            connection.close()
+
+    def _prepare_wallet_transfer_once(
+        self,
+        wallet_id: str,
+        kind: str,
+        private_key: bytes,
+        destination: str,
+        amount_lamports: int,
+    ) -> dict[str, Any]:
+        """Construct and persist one candidate while excluding other workers.
+
+        Holding SQLite's write reservation across blockhash lookup and signing
+        is intentionally narrow but necessary: without it, separate processes
+        could sign different candidates before the first persisted signature
+        became visible. No network broadcast occurs while this lock is held.
+        """
+        if kind not in {"funding", "payment"}:
+            raise ValueError("Unsupported wallet transfer kind")
+        connection = self._connection()
+        try:
+            begin_immediate(connection)
+            row = connection.execute(
+                "SELECT * FROM wallet_sessions WHERE id = ?", (wallet_id,)
+            ).fetchone()
+            if not row:
+                rollback(connection)
+                raise DomainError("That test wallet no longer exists.", "not_found")
+            if row[f"{kind}_signature"]:
+                commit(connection)
+                return dict(row)
+            preparation = self.solana.prepare_transfer(
+                private_key, destination, amount_lamports
+            )
+            connection.execute(
+                f"""UPDATE wallet_sessions SET {kind}_signed_transaction = ?,
+                {kind}_signature = ?, status = ?, updated_at = ?
+                WHERE id = ? AND {kind}_signature IS NULL""",
+                (
+                    base64.b64encode(preparation.signed_transaction).decode(),
+                    preparation.transaction_signature,
+                    "funding_pending" if kind == "funding" else "payment_pending",
+                    iso_now(),
+                    wallet_id,
+                ),
+            )
+            row = connection.execute(
+                "SELECT * FROM wallet_sessions WHERE id = ?", (wallet_id,)
+            ).fetchone()
+            commit(connection)
+            return dict(row)
+        except Exception:
+            rollback(connection)
+            raise
         finally:
             connection.close()
 
@@ -789,21 +855,98 @@ class DemoTreasuryService:
         connection = self._connection()
         try:
             connection.execute(
-                "UPDATE wallet_sessions SET status = ?, last_error = ?, updated_at = ? WHERE id = ?",
+                """UPDATE wallet_sessions SET status = ?, last_error = ?, updated_at = ?
+                WHERE id = ? AND status NOT IN ('complete', 'failed')""",
                 (status, error, iso_now(), wallet_id),
             )
         finally:
             connection.close()
 
-    def _execute_wallet_funding(self, row: dict[str, Any]) -> dict[str, Any]:
+    def _claim_wallet_broadcast(self, row: dict[str, Any], kind: str) -> bool:
+        """Atomically grant one request permission to broadcast the saved bytes."""
+        if kind not in {"funding", "payment"}:
+            raise ValueError("Unsupported wallet transfer kind")
+        connection = self._connection()
+        try:
+            begin_immediate(connection)
+            cursor = connection.execute(
+                f"""UPDATE wallet_sessions SET {kind}_broadcast_at = ?, updated_at = ?
+                WHERE id = ? AND {kind}_signature = ? AND {kind}_broadcast_at IS NULL""",
+                (iso_now(), iso_now(), row["id"], row[f"{kind}_signature"]),
+            )
+            commit(connection)
+            return cursor.rowcount == 1
+        except Exception:
+            rollback(connection)
+            raise
+        finally:
+            connection.close()
+
+    def _submit_saved_wallet_transfer(self, row: dict[str, Any], kind: str) -> dict[str, Any]:
+        """Broadcast one durably saved candidate, at most once per database."""
         wallet_id = row["id"]
-        if row.get("status") == "needs_review":
-            return row
-        treasury = self._settings()
-        if not treasury:
-            self._mark_wallet(wallet_id, "failed", "The demo treasury is unavailable.")
+        signature = row.get(f"{kind}_signature")
+        encoded = row.get(f"{kind}_signed_transaction")
+        if not signature or not encoded:
+            self._mark_wallet(wallet_id, "needs_review", f"The saved {kind} transaction is incomplete.")
             return self._wallet_session(session_id=wallet_id)
+        if row.get(f"{kind}_broadcast_at") or not self._claim_wallet_broadcast(row, kind):
+            return self._wallet_session(session_id=wallet_id)
+        try:
+            signed_transaction = base64.b64decode(encoded, validate=True)
+            broadcast = self.solana.broadcast_signed_transaction(signed_transaction)
+        except Exception as error:
+            try:
+                chain_status = self.solana.signature_status(signature)
+            except Exception:
+                chain_status = "unknown"
+            if chain_status == "failed":
+                self._mark_wallet(wallet_id, "failed", f"The {kind} transaction failed on Solana.")
+            elif chain_status in {"processed", "confirmed"}:
+                self._mark_wallet(
+                    wallet_id,
+                    "funding_pending" if kind == "funding" else "payment_pending",
+                    f"The {kind} transaction was submitted and is still being confirmed.",
+                )
+            elif chain_status == "finalized":
+                self._mark_wallet(wallet_id, "funded" if kind == "funding" else "payment_pending")
+            else:
+                self._mark_wallet(
+                    wallet_id,
+                    "needs_review",
+                    f"{kind.title()} outcome is uncertain: {error}",
+                )
+            return self._wallet_session(session_id=wallet_id)
+        if broadcast != signature:
+            self._mark_wallet(wallet_id, "needs_review", f"{kind.title()} RPC returned a different signature.")
+        else:
+            try:
+                chain_status = self.solana.signature_status(signature)
+            except Exception:
+                chain_status = "unknown"
+            if chain_status == "failed":
+                self._mark_wallet(wallet_id, "failed", f"The {kind} transaction failed on Solana.")
+            elif chain_status == "finalized" and kind == "funding":
+                self._mark_wallet(wallet_id, "funded")
+            elif chain_status == "finalized":
+                return self._verify_finalized_wallet_payment(
+                    self._wallet_session(session_id=wallet_id)
+                )
+            else:
+                self._mark_wallet(
+                    wallet_id,
+                    "funding_pending" if kind == "funding" else "payment_pending",
+                    f"The {kind} transaction was submitted and is awaiting finalization.",
+                )
+        return self._wallet_session(session_id=wallet_id)
+
+    def _reconcile_wallet_funding(self, row: dict[str, Any]) -> dict[str, Any]:
+        wallet_id = row["id"]
         if not row.get("funding_signature"):
+            treasury = self._settings()
+            if not treasury:
+                self._mark_wallet(wallet_id, "failed", "The demo treasury is unavailable.")
+                return self._wallet_session(session_id=wallet_id)
             try:
                 if self.solana.get_balance(treasury["public_address"]) < row["funding_lamports"]:
                     self._mark_wallet(wallet_id, "failed", "The demo treasury needs more Devnet SOL.")
@@ -811,132 +954,146 @@ class DemoTreasuryService:
                 private_key = decrypt_private_key(
                     treasury["encrypted_private_key"], self.wallet_encryption_key
                 )
-                preparation = self.solana.prepare_transfer(
-                    private_key, row["sender_address"], row["funding_lamports"]
+                row = self._prepare_wallet_transfer_once(
+                    wallet_id,
+                    "funding",
+                    private_key,
+                    row["sender_address"],
+                    row["funding_lamports"],
                 )
-                self._save_wallet_transfer(wallet_id, "funding", preparation)
-                try:
-                    broadcast = self.solana.broadcast_signed_transaction(preparation.signed_transaction)
-                except Exception as error:
-                    if self._finalized(preparation.transaction_signature):
-                        self._mark_wallet(wallet_id, "funded")
-                    else:
-                        self._mark_wallet(wallet_id, "needs_review", f"Funding outcome is uncertain: {error}")
-                    return self._wallet_session(session_id=wallet_id)
-                if broadcast != preparation.transaction_signature:
-                    self._mark_wallet(wallet_id, "needs_review", "Funding RPC returned a different signature.")
-                    return self._wallet_session(session_id=wallet_id)
             except Exception as error:
                 self._mark_wallet(wallet_id, "failed", f"Test wallet funding could not be prepared: {error}")
                 return self._wallet_session(session_id=wallet_id)
-        row = self._wallet_session(session_id=wallet_id)
-        if row.get("status") == "needs_review":
-            return row
-        if not self._finalized(row.get("funding_signature", "")):
-            return row
-        self._mark_wallet(wallet_id, "funded")
+        if not row.get("funding_broadcast_at"):
+            return self._submit_saved_wallet_transfer(row, "funding")
+        try:
+            chain_status = self.solana.signature_status(row["funding_signature"])
+        except Exception as error:
+            self._mark_wallet(wallet_id, "needs_review", f"Funding status lookup failed: {error}")
+            return self._wallet_session(session_id=wallet_id)
+        if chain_status == "finalized":
+            self._mark_wallet(wallet_id, "funded")
+        elif chain_status in {"processed", "confirmed"}:
+            self._mark_wallet(wallet_id, "funding_pending", "Funding is still being finalized on Devnet.")
+        elif chain_status == "failed":
+            self._mark_wallet(wallet_id, "failed", "The saved funding transaction failed on Solana.")
+        else:
+            self._mark_wallet(
+                wallet_id,
+                "needs_review",
+                "The saved funding signature was not found on Devnet. No duplicate funding was created.",
+            )
         return self._wallet_session(session_id=wallet_id)
 
-    def _execute_wallet_payment(self, row: dict[str, Any]) -> dict[str, Any]:
+    def _verify_finalized_wallet_payment(self, row: dict[str, Any]) -> dict[str, Any]:
         wallet_id = row["id"]
-        if row.get("status") == "needs_review":
-            return row
-        order = self._active_wallet_recipient(row.get("recipient_address", ""))
-        if order["id"] != row.get("order_id"):
-            self._mark_wallet(wallet_id, "needs_review", "The checkout recipient could not be verified safely.")
-            return self._wallet_session(session_id=wallet_id)
-        if not row.get("payment_signature"):
-            try:
-                sender_key = decrypt_private_key(row["encrypted_private_key"], self.wallet_encryption_key)
-                preparation = self.solana.prepare_transfer(
-                    sender_key, row["recipient_address"], row["selected_lamports"]
-                )
-                self._save_wallet_transfer(wallet_id, "payment", preparation)
-                try:
-                    broadcast = self.solana.broadcast_signed_transaction(preparation.signed_transaction)
-                except Exception as error:
-                    if not self._finalized(preparation.transaction_signature):
-                        self._mark_wallet(wallet_id, "needs_review", f"Payment outcome is uncertain: {error}")
-                        return self._wallet_session(session_id=wallet_id)
-                    broadcast = preparation.transaction_signature
-                if broadcast != preparation.transaction_signature:
-                    self._mark_wallet(wallet_id, "needs_review", "Payment RPC returned a different signature.")
-                    return self._wallet_session(session_id=wallet_id)
-            except Exception as error:
-                self._mark_wallet(wallet_id, "needs_review", f"Test payment could not be prepared: {error}")
-                return self._wallet_session(session_id=wallet_id)
-        row = self._wallet_session(session_id=wallet_id)
-        if row.get("status") == "needs_review":
-            return row
-        if not self._finalized(row.get("payment_signature", "")):
-            return row
         try:
             verification = self.solana.verify_payment(
                 row["payment_signature"], row["recipient_address"], row["selected_lamports"]
             )
-            if verification.state in {"exact", "underpayment", "overpayment"}:
+            if verification.state not in {"exact", "underpayment", "overpayment"}:
+                self._mark_wallet(wallet_id, "needs_review", verification.reason)
+            else:
                 _order, recorded = self.engine.record_verified_payment(
                     row["order_id"], verification, expected_sender=row["sender_address"]
                 )
-                if recorded.state not in {"exact", "underpayment", "overpayment"}:
-                    self._mark_wallet(wallet_id, "needs_review", recorded.reason)
-                else:
+                if recorded.state in {"exact", "underpayment", "overpayment"}:
                     self._mark_wallet(wallet_id, "complete")
-            else:
-                self._mark_wallet(wallet_id, "needs_review", verification.reason)
+                else:
+                    self._mark_wallet(wallet_id, "needs_review", recorded.reason)
         except Exception as error:
             self._mark_wallet(wallet_id, "needs_review", f"Payment verification failed: {error}")
         return self._wallet_session(session_id=wallet_id)
 
+    def _reserved_wallet_order(self, row: dict[str, Any]) -> dict[str, Any]:
+        """Validate the immutable authorization captured before treasury funding.
+
+        Checkout expiry blocks new reservations, but must not revoke an
+        operation after its destination, amount, order, and app-owned sender
+        were atomically bound and treasury funding was broadcast.
+        """
+        order = self.engine.get_order(row.get("order_id", ""))
+        if not order:
+            raise DomainError("The reserved checkout no longer exists.", "not_found")
+        authorized = (
+            order["payment_address"] == row.get("recipient_address")
+            and order["status"] == "awaiting_payment"
+            and not order.get("payment_signature")
+            and order.get("refund_destination") == row.get("sender_address")
+            and order.get("refund_destination_mode") == "internal_demo"
+            and bool(order.get("sender_ownership_verified"))
+        )
+        if not authorized:
+            raise DomainError("The reserved checkout authorization changed.", "locked")
+        return order
+
+    def _reconcile_wallet_payment(self, row: dict[str, Any]) -> dict[str, Any]:
+        wallet_id = row["id"]
+        if not row.get("payment_signature"):
+            try:
+                order = self._reserved_wallet_order(row)
+                if order["id"] != row.get("order_id"):
+                    raise DomainError("The checkout recipient changed.", "recipient")
+                sender_key = decrypt_private_key(row["encrypted_private_key"], self.wallet_encryption_key)
+                row = self._prepare_wallet_transfer_once(
+                    wallet_id,
+                    "payment",
+                    sender_key,
+                    row["recipient_address"],
+                    row["selected_lamports"],
+                )
+            except Exception as error:
+                self._mark_wallet(wallet_id, "needs_review", f"Test payment could not be prepared: {error}")
+                return self._wallet_session(session_id=wallet_id)
+        if not row.get("payment_broadcast_at"):
+            return self._submit_saved_wallet_transfer(row, "payment")
+        try:
+            chain_status = self.solana.signature_status(row["payment_signature"])
+        except Exception as error:
+            self._mark_wallet(wallet_id, "needs_review", f"Payment status lookup failed: {error}")
+            return self._wallet_session(session_id=wallet_id)
+        if chain_status == "finalized":
+            return self._verify_finalized_wallet_payment(row)
+        if chain_status in {"processed", "confirmed"}:
+            self._mark_wallet(wallet_id, "payment_pending", "Payment is still being finalized on Devnet.")
+        elif chain_status == "failed":
+            self._mark_wallet(wallet_id, "failed", "The saved payment transaction failed on Solana.")
+        else:
+            self._mark_wallet(
+                wallet_id,
+                "needs_review",
+                "The saved payment signature was not found on Devnet. No duplicate payment was created.",
+            )
+        return self._wallet_session(session_id=wallet_id)
+
+    def _advance_wallet_operation(self, row: dict[str, Any]) -> dict[str, Any]:
+        row = self._reconcile_wallet_funding(row)
+        if row["status"] != "funded":
+            return row
+        return self._reconcile_wallet_payment(row)
+
     def reconcile_test_wallet_payment(
         self, browser_id: str, session_id: str | None = None
     ) -> dict[str, Any]:
-        """Recheck the saved payment signature without constructing a transfer."""
+        """Resume one owner-scoped operation from its durable signed candidates."""
         if not session_id:
             raise DomainError("Open a saved Test Wallet session before checking payment status.", "not_found")
         row = self._wallet_session(browser_id=browser_id, session_id=session_id)
         if not row:
             raise DomainError("Create a test wallet before checking payment status.", "not_found")
-        if not row.get("payment_signature"):
-            raise DomainError("There is no saved payment signature to recheck.", "not_found")
+        if not all(
+            row.get(field)
+            for field in ("recipient_address", "order_id", "selected_lamports", "funding_lamports")
+        ):
+            raise DomainError("There is no saved Test Wallet operation to recheck.", "not_found")
         if row["status"] in {"complete", "failed"}:
             return self._public_wallet_session(row)
-        signature = row["payment_signature"]
-        try:
-            chain_status = self.solana.signature_status(signature)
-        except Exception as error:
-            self._mark_wallet(row["id"], "needs_review", f"Payment status lookup failed: {error}")
-            return self._public_wallet_session(self._wallet_session(session_id=row["id"]))
-        if chain_status == "failed":
-            self._mark_wallet(row["id"], "failed", "The saved payment transaction failed on Solana.")
-        elif chain_status in {"confirmed", "finalized"}:
-            try:
-                verification = self.solana.verify_payment(
-                    signature, row["recipient_address"], row["selected_lamports"]
-                )
-                if verification.state in {"exact", "underpayment", "overpayment"} and chain_status == "finalized":
-                    _order, recorded = self.engine.record_verified_payment(
-                        row["order_id"], verification, expected_sender=row["sender_address"]
-                    )
-                    if recorded.state in {"exact", "underpayment", "overpayment"}:
-                        self._mark_wallet(row["id"], "complete")
-                    else:
-                        self._mark_wallet(row["id"], "needs_review", recorded.reason)
-                elif verification.state in {"exact", "underpayment", "overpayment"}:
-                    self._mark_wallet(row["id"], "payment_pending", "Payment is confirmed but not finalized yet.")
-                else:
-                    self._mark_wallet(row["id"], "needs_review", verification.reason)
-            except Exception as error:
-                self._mark_wallet(row["id"], "needs_review", f"Payment verification failed: {error}")
-        elif chain_status in {"processed"}:
-            self._mark_wallet(row["id"], "payment_pending", "Payment is still being confirmed on Devnet.")
-        else:
-            self._mark_wallet(
-                row["id"],
-                "needs_review",
-                "The saved payment signature was not found on Devnet. No duplicate payment was created.",
-            )
-        return self._public_wallet_session(self._wallet_session(session_id=row["id"]))
+        with self._execution_lock:
+            row = self._wallet_session(browser_id=browser_id, session_id=session_id)
+            if not row or row["status"] in {"complete", "failed"}:
+                return self._public_wallet_session(row)
+            row = self._advance_wallet_operation(row)
+        return self._public_wallet_session(row)
 
     def send_test_wallet_payment(
         self,
@@ -968,12 +1125,7 @@ class DemoTreasuryService:
             row = self._wallet_session(session_id=row["id"])
             if row["status"] in self.TERMINAL_STATUSES:
                 return self._public_wallet_session(row)
-            row = self._execute_wallet_funding(row)
-            if row.get("status") in {"failed", "needs_review"}:
-                return self._public_wallet_session(row)
-            if not self._finalized(row.get("funding_signature", "")):
-                return self._public_wallet_session(row)
-            row = self._execute_wallet_payment(row)
+            row = self._advance_wallet_operation(row)
         return self._public_wallet_session(row)
 
     def treasury_dashboard(self) -> dict[str, Any]:

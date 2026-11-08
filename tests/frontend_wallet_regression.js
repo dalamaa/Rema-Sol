@@ -15,6 +15,7 @@ class FakeElement {
     this.disabled = false;
     this.hidden = false;
     this._textContent = "";
+    if (this.tagName === "form") this.elements = {};
   }
 
   set textContent(value) {
@@ -37,6 +38,7 @@ class FakeElement {
   appendChild(child) {
     child.parentElement = this;
     this.children.push(child);
+    if (this.tagName === "form" && child.name) this.elements[child.name] = child;
     return child;
   }
 
@@ -257,7 +259,88 @@ async function main() {
   console.log("frontend wallet success regression: passed");
 }
 
-main().catch((error) => {
+async function pollingTest() {
+  const fixture = buildFixture();
+  const document = new FakeDocument(fixture.form, fixture.resultPanel, fixture.errorRegion);
+  let timerId = 0;
+  const timers = new Map();
+  const setTimeout = (callback, delay) => {
+    timerId += 1;
+    timers.set(timerId, { callback, delay });
+    return timerId;
+  };
+  const clearTimeout = (id) => timers.delete(id);
+  const runNextTimer = async () => {
+    const next = [...timers.entries()].sort((left, right) => left[1].delay - right[1].delay)[0];
+    assert.ok(next, "expected a scheduled wallet poll");
+    timers.delete(next[0]);
+    await next[1].callback();
+  };
+  const window = {
+    __REMA_SOL_TEST__: {},
+    innerHeight: 800,
+    setTimeout,
+    clearTimeout,
+    requestAnimationFrame: (callback) => callback(),
+    matchMedia: () => ({ matches: false }),
+  };
+  const responses = [
+    { wallet: { id: "wallet-1", status: "funding_pending" } },
+    {
+      wallet: {
+        id: "wallet-1",
+        status: "payment_pending",
+        sender_address: "sender-wallet",
+        recipient_address: "recipient-wallet",
+        selected_sol: "0.002",
+        payment_signature: "saved-payment",
+      },
+    },
+    {
+      wallet: {
+        id: "wallet-1",
+        status: "complete",
+        sender_address: "sender-wallet",
+        recipient_address: "recipient-wallet",
+        selected_sol: "0.002",
+        payment_signature: "saved-payment",
+      },
+      explorer_url: "https://explorer.solana.com/tx/saved-payment?cluster=devnet",
+    },
+  ];
+  const requestedPaths = [];
+  const context = {
+    window,
+    document,
+    navigator: { clipboard: { writeText: async () => {} } },
+    FormData: FakeFormData,
+    AbortController,
+    Event,
+    fetch: async (path) => {
+      requestedPaths.push(path);
+      const payload = responses.shift();
+      return { ok: true, json: async () => payload };
+    },
+  };
+  vm.runInNewContext(
+    fs.readFileSync(path.join(__dirname, "..", "remasol", "static", "js", "app.js"), "utf8"),
+    context,
+    { filename: "remasol/static/js/app.js" },
+  );
+
+  await window.__REMA_SOL_TEST__.wallet.requestWalletState(fixture.form);
+  assert.match(fixture.resultPanel.textContent, /Payment in progress/);
+  assert.equal(fixture.form.submitButton.hidden, true);
+  await runNextTimer();
+  assert.match(fixture.resultPanel.textContent, /awaiting finalization/);
+  await runNextTimer();
+  assert.match(fixture.resultPanel.textContent, /Payment confirmed/);
+  assert.deepEqual(requestedPaths, ["/wallet/send", "/wallet/recheck", "/wallet/recheck"]);
+  assert.equal(timers.size, 0);
+  console.log("frontend wallet bounded polling regression: passed");
+}
+
+main().then(pollingTest).catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

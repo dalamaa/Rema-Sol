@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 import re
+import sqlite3
+from concurrent.futures import ThreadPoolExecutor
+
+from remasol.db import _migrate_wallet_broadcast_claims
+from remasol.security import decrypt_private_key
 
 from .conftest import add_payment, create_order
 
@@ -311,6 +316,40 @@ def test_test_wallet_is_separate_and_only_sends_to_active_checkouts(client, app,
     assert fake_solana.broadcast_calls == 2
 
 
+def test_wallet_maintenance_guard_blocks_send_and_recheck_without_broadcast(
+    client, app, fake_solana
+):
+    token = csrf(client)
+    created = client.post("/wallet/create", data={"csrf_token": token})
+    session_id = created.location.rsplit("/", 1)[-1]
+    app.config["WALLET_OPERATIONS_PAUSED"] = True
+    request_data = {
+        "csrf_token": token,
+        "session_id": session_id,
+        "recipient_address": "checkout-wallet",
+        "amount": "0.005",
+    }
+
+    sent = client.post(
+        "/wallet/send", data=request_data, headers={"X-Requested-With": "fetch"}
+    )
+    rechecked = client.post(
+        "/wallet/recheck",
+        data={"csrf_token": token, "session_id": session_id},
+        headers={"X-Requested-With": "fetch"},
+    )
+
+    assert sent.status_code == 503
+    assert rechecked.status_code == 503
+    assert sent.get_json()["error"] == (
+        "Test Wallet operations are temporarily paused for maintenance."
+    )
+    assert rechecked.get_json()["error"] == sent.get_json()["error"]
+    assert sent.get_json()["wallet"]["id"] == session_id
+    assert fake_solana.prepare_calls == 0
+    assert fake_solana.broadcast_calls == 0
+
+
 def test_test_wallet_never_overwrites_a_locked_refund_destination(
     client, app, engine, product, fake_solana
 ):
@@ -455,6 +494,303 @@ def test_test_wallet_fetch_recheck_uses_saved_payment_without_broadcast(client, 
     assert rechecked.status_code == 200
     assert rechecked.get_json()["status"] == "needs_review"
     assert fake_solana.broadcast_calls == 2
+
+
+def test_wallet_reconciliation_advances_delayed_funding_and_payment_once(
+    client, app, engine, product, fake_solana
+):
+    token = csrf(client)
+    created = client.post("/wallet/create", data={"csrf_token": token})
+    session_id = created.location.rsplit("/", 1)[-1]
+    order, _claim_code = engine.create_order_draft(product["slug"], "127.0.0.1")
+    with client.session_transaction() as browser_session:
+        token = browser_session["csrf_token"]
+
+    fake_solana.signature_statuses["transfer-signature-1"] = "processed"
+    sent = client.post(
+        "/wallet/send",
+        data={
+            "csrf_token": token,
+            "session_id": session_id,
+            "recipient_address": order["payment_address"],
+            "amount": "0.005",
+        },
+        headers={"Accept": "application/json", "X-Requested-With": "fetch"},
+    )
+    assert sent.get_json()["status"] == "funding_pending"
+    assert fake_solana.broadcast_calls == 1
+    refreshed = client.get(created.location).get_data(as_text=True)
+    assert 'data-wallet-status="funding_pending"' in refreshed
+    assert 'data-recheck-action="/wallet/recheck"' in refreshed
+
+    fake_solana.signature_statuses["transfer-signature-1"] = "confirmed"
+    confirmed = client.post(
+        "/wallet/recheck",
+        data={"csrf_token": token, "session_id": session_id},
+        headers={"Accept": "application/json", "X-Requested-With": "fetch"},
+    )
+    assert confirmed.get_json()["status"] == "funding_pending"
+    assert fake_solana.broadcast_calls == 1
+
+    connection = engine._connection()
+    try:
+        connection.execute(
+            "UPDATE orders SET expires_at = ? WHERE id = ?",
+            ("2000-01-01T00:00:00+00:00", order["id"]),
+        )
+    finally:
+        connection.close()
+
+    fake_solana.signature_statuses["transfer-signature-1"] = "finalized"
+    fake_solana.signature_statuses["transfer-signature-2"] = "processed"
+    payment = client.post(
+        "/wallet/recheck",
+        data={"csrf_token": token, "session_id": session_id},
+        headers={"Accept": "application/json", "X-Requested-With": "fetch"},
+    )
+    assert payment.get_json()["status"] == "payment_pending"
+    assert fake_solana.broadcast_calls == 2
+
+    fake_solana.signature_statuses["transfer-signature-2"] = "confirmed"
+    assert client.post(
+        "/wallet/recheck", data={"csrf_token": token, "session_id": session_id}
+    ).status_code == 302
+    assert app.extensions["demo"]._wallet_session(session_id=session_id)["status"] == "payment_pending"
+
+    fake_solana.signature_statuses["transfer-signature-2"] = "finalized"
+    client.post("/wallet/recheck", data={"csrf_token": token, "session_id": session_id})
+    row = app.extensions["demo"]._wallet_session(session_id=session_id)
+    assert row["status"] == "complete"
+    assert row["funding_signature"] == "transfer-signature-1"
+    assert row["payment_signature"] == "transfer-signature-2"
+    assert fake_solana.broadcast_calls == 2
+
+
+def test_duplicate_send_resumes_saved_funding_without_second_funding(
+    client, app, engine, product, fake_solana
+):
+    token = csrf(client)
+    created = client.post("/wallet/create", data={"csrf_token": token})
+    session_id = created.location.rsplit("/", 1)[-1]
+    order, _claim_code = engine.create_order_draft(product["slug"], "127.0.0.1")
+    with client.session_transaction() as browser_session:
+        token = browser_session["csrf_token"]
+    request_data = {
+        "csrf_token": token,
+        "session_id": session_id,
+        "recipient_address": order["payment_address"],
+        "amount": "0.005",
+    }
+    fake_solana.signature_statuses["transfer-signature-1"] = "processed"
+    client.post("/wallet/send", data=request_data)
+    saved_funding = app.extensions["demo"]._wallet_session(session_id=session_id)["funding_signature"]
+
+    fake_solana.signature_statuses["transfer-signature-1"] = "finalized"
+    client.post("/wallet/send", data=request_data)
+    row = app.extensions["demo"]._wallet_session(session_id=session_id)
+    assert row["funding_signature"] == saved_funding
+    assert row["payment_signature"] == "transfer-signature-2"
+    assert fake_solana.broadcast_calls == 2
+
+
+def test_restart_resumes_persisted_unbroadcast_candidate_once(
+    app, engine, product, fake_solana
+):
+    demo = app.extensions["demo"]
+    browser_id = "restart-browser"
+    wallet = demo.create_test_wallet(browser_id, "127.0.0.1")
+    order, _claim_code = engine.create_order_draft(product["slug"], "127.0.0.1")
+    row = demo._reserve_wallet(
+        wallet["id"], order["payment_address"], order["id"], 5_000_000, demo._settings()
+    )
+    treasury = demo._settings()
+    private_key = decrypt_private_key(
+        treasury["encrypted_private_key"], app.config["WALLET_ENCRYPTION_KEY"]
+    )
+    candidate = fake_solana.prepare_transfer(private_key, row["sender_address"], row["funding_lamports"])
+    assert demo._save_wallet_transfer(row["id"], "funding", candidate) is True
+    assert fake_solana.broadcast_calls == 0
+
+    restarted = demo.__class__(
+        app.config["DATABASE"],
+        app.config["WALLET_ENCRYPTION_KEY"],
+        fake_solana,
+        engine,
+        app.config,
+    )
+    fake_solana.signature_statuses[candidate.transaction_signature] = "processed"
+    restarted.reconcile_test_wallet_payment(browser_id, row["id"])
+    restarted.reconcile_test_wallet_payment(browser_id, row["id"])
+    recovered = restarted._wallet_session(session_id=row["id"])
+    assert recovered["funding_signature"] == candidate.transaction_signature
+    assert recovered["funding_broadcast_at"]
+    assert fake_solana.broadcast_calls == 1
+
+
+def test_concurrent_reconciliation_broadcasts_one_saved_payment(
+    app, engine, product, fake_solana
+):
+    first = app.extensions["demo"]
+    browser_id = "concurrent-browser"
+    wallet = first.create_test_wallet(browser_id, "127.0.0.1")
+    order, _claim_code = engine.create_order_draft(product["slug"], "127.0.0.1")
+    row = first._reserve_wallet(
+        wallet["id"], order["payment_address"], order["id"], 5_000_000, first._settings()
+    )
+    fake_solana.signature_statuses["transfer-signature-1"] = "processed"
+    first._advance_wallet_operation(row)
+    assert fake_solana.broadcast_calls == 1
+    fake_solana.signature_statuses["transfer-signature-1"] = "finalized"
+    fake_solana.signature_statuses["transfer-signature-2"] = "processed"
+    second = first.__class__(
+        app.config["DATABASE"], app.config["WALLET_ENCRYPTION_KEY"], fake_solana, engine, app.config
+    )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(
+            pool.map(
+                lambda service: service.reconcile_test_wallet_payment(browser_id, wallet["id"]),
+                (first, second),
+            )
+        )
+
+    saved = first._wallet_session(session_id=wallet["id"])
+    assert {result["payment_signature"] for result in results} == {saved["payment_signature"]}
+    assert saved["funding_signature"] == "transfer-signature-1"
+    assert fake_solana.prepare_calls == 2
+    assert fake_solana.broadcast_calls == 2
+
+
+def test_unknown_funding_routes_to_review_and_later_finalization_resumes(
+    client, app, engine, product, fake_solana
+):
+    token = csrf(client)
+    created = client.post("/wallet/create", data={"csrf_token": token})
+    session_id = created.location.rsplit("/", 1)[-1]
+    order, _claim_code = engine.create_order_draft(product["slug"], "127.0.0.1")
+    with client.session_transaction() as browser_session:
+        token = browser_session["csrf_token"]
+    fake_solana.signature_statuses["transfer-signature-1"] = "unknown"
+    client.post(
+        "/wallet/send",
+        data={
+            "csrf_token": token,
+            "session_id": session_id,
+            "recipient_address": order["payment_address"],
+            "amount": "0.005",
+        },
+    )
+    assert app.extensions["demo"]._wallet_session(session_id=session_id)["status"] == "funding_pending"
+
+    reviewed = client.post(
+        "/wallet/recheck",
+        data={"csrf_token": token, "session_id": session_id},
+        follow_redirects=True,
+    )
+    assert "Payment needs review" in reviewed.get_data(as_text=True)
+    assert "Recheck Saved Operation" in reviewed.get_data(as_text=True)
+    assert fake_solana.broadcast_calls == 1
+
+    fake_solana.signature_statuses["transfer-signature-1"] = "finalized"
+    client.post("/wallet/recheck", data={"csrf_token": token, "session_id": session_id})
+    assert app.extensions["demo"]._wallet_session(session_id=session_id)["status"] == "complete"
+    assert fake_solana.broadcast_calls == 2
+
+
+def test_funding_broadcast_timeout_is_manual_review_and_never_rebroadcasts(
+    client, app, engine, product, fake_solana
+):
+    token = csrf(client)
+    created = client.post("/wallet/create", data={"csrf_token": token})
+    session_id = created.location.rsplit("/", 1)[-1]
+    order, _claim_code = engine.create_order_draft(product["slug"], "127.0.0.1")
+    with client.session_transaction() as browser_session:
+        token = browser_session["csrf_token"]
+    fake_solana.broadcast_timeout = True
+    fake_solana.signature_statuses["transfer-signature-1"] = "unknown"
+
+    client.post(
+        "/wallet/send",
+        data={
+            "csrf_token": token,
+            "session_id": session_id,
+            "recipient_address": order["payment_address"],
+            "amount": "0.005",
+        },
+    )
+    row = app.extensions["demo"]._wallet_session(session_id=session_id)
+    assert row["status"] == "needs_review"
+    assert row["funding_signature"] == "transfer-signature-1"
+    assert row["payment_signature"] is None
+    assert fake_solana.broadcast_calls == 1
+
+    fake_solana.broadcast_timeout = False
+    client.post("/wallet/recheck", data={"csrf_token": token, "session_id": session_id})
+    assert fake_solana.broadcast_calls == 1
+
+
+def test_failed_funding_is_terminal_without_creating_payment(
+    client, app, engine, product, fake_solana
+):
+    token = csrf(client)
+    created = client.post("/wallet/create", data={"csrf_token": token})
+    session_id = created.location.rsplit("/", 1)[-1]
+    order, _claim_code = engine.create_order_draft(product["slug"], "127.0.0.1")
+    with client.session_transaction() as browser_session:
+        token = browser_session["csrf_token"]
+    fake_solana.signature_statuses["transfer-signature-1"] = "processed"
+    client.post(
+        "/wallet/send",
+        data={
+            "csrf_token": token,
+            "session_id": session_id,
+            "recipient_address": order["payment_address"],
+            "amount": "0.005",
+        },
+    )
+
+    fake_solana.signature_statuses["transfer-signature-1"] = "failed"
+    client.post("/wallet/recheck", data={"csrf_token": token, "session_id": session_id})
+    row = app.extensions["demo"]._wallet_session(session_id=session_id)
+    assert row["status"] == "failed"
+    assert row["payment_signature"] is None
+    assert fake_solana.prepare_calls == 1
+    assert fake_solana.broadcast_calls == 1
+
+
+def test_broadcast_claim_migration_preserves_legacy_signatures_and_restart_candidates(tmp_path):
+    database = tmp_path / "legacy-wallet.sqlite3"
+    connection = sqlite3.connect(database)
+    connection.row_factory = sqlite3.Row
+    connection.execute(
+        """CREATE TABLE wallet_sessions (
+        id TEXT PRIMARY KEY, funding_signature TEXT, payment_signature TEXT,
+        funding_signed_transaction TEXT, payment_signed_transaction TEXT,
+        updated_at TEXT NOT NULL)"""
+    )
+    connection.execute(
+        """INSERT INTO wallet_sessions VALUES
+        ('legacy', 'saved-funding', 'saved-payment', 'funding-bytes', 'payment-bytes', 'legacy-time')"""
+    )
+    _migrate_wallet_broadcast_claims(connection)
+    legacy = connection.execute("SELECT * FROM wallet_sessions WHERE id = 'legacy'").fetchone()
+    assert legacy["funding_signature"] == "saved-funding"
+    assert legacy["payment_signature"] == "saved-payment"
+    assert legacy["funding_signed_transaction"] == "funding-bytes"
+    assert legacy["payment_signed_transaction"] == "payment-bytes"
+    assert legacy["funding_broadcast_at"] == "legacy-time"
+    assert legacy["payment_broadcast_at"] == "legacy-time"
+
+    connection.execute(
+        """INSERT INTO wallet_sessions
+        (id, funding_signature, funding_signed_transaction, updated_at)
+        VALUES ('restart', 'new-candidate', 'new-bytes', 'restart-time')"""
+    )
+    _migrate_wallet_broadcast_claims(connection)
+    restart = connection.execute("SELECT * FROM wallet_sessions WHERE id = 'restart'").fetchone()
+    assert restart["funding_signature"] == "new-candidate"
+    assert restart["funding_broadcast_at"] is None
+    connection.close()
 
 
 def test_new_test_creates_fresh_wallet_and_preserves_history(client, app, engine, product, fake_solana):

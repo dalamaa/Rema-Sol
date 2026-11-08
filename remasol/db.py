@@ -105,8 +105,10 @@ CREATE TABLE IF NOT EXISTS wallet_sessions (
     funding_lamports INTEGER,
     funding_signed_transaction TEXT,
     funding_signature TEXT UNIQUE,
+    funding_broadcast_at TEXT,
     payment_signed_transaction TEXT,
     payment_signature TEXT UNIQUE,
+    payment_broadcast_at TEXT,
     last_submit_at TEXT,
     last_error TEXT,
     created_at TEXT NOT NULL,
@@ -146,6 +148,7 @@ def init_db(app):
     try:
         connection.executescript(SCHEMA)
         _migrate_wallet_browser_identity(connection)
+        _migrate_wallet_broadcast_claims(connection)
         columns = {
             row["name"]
             for row in connection.execute("PRAGMA table_info(orders)").fetchall()
@@ -259,6 +262,34 @@ def _migrate_wallet_browser_identity(connection: sqlite3.Connection):
     connection.execute("CREATE INDEX IF NOT EXISTS idx_wallet_sessions_created_at ON wallet_sessions(created_at)")
     connection.execute("CREATE INDEX IF NOT EXISTS idx_wallet_sessions_order_id ON wallet_sessions(order_id)")
     connection.execute("CREATE INDEX IF NOT EXISTS idx_wallet_sessions_browser_id ON wallet_sessions(browser_id)")
+
+
+def _migrate_wallet_broadcast_claims(connection: sqlite3.Connection):
+    """Add durable broadcast claims without replaying legacy candidates.
+
+    Older releases persisted a signature immediately before attempting its
+    broadcast. Existing signatures are therefore conservatively marked as
+    already attempted. Reconciliation checks their chain status and never
+    treats a missing migration-era timestamp as permission to rebroadcast.
+    """
+    columns = {
+        row["name"]
+        for row in connection.execute("PRAGMA table_info(wallet_sessions)").fetchall()
+    }
+    added_columns = False
+    for column in ("funding_broadcast_at", "payment_broadcast_at"):
+        if column not in columns:
+            connection.execute(f"ALTER TABLE wallet_sessions ADD COLUMN {column} TEXT")
+            added_columns = True
+    if added_columns:
+        connection.execute(
+            """UPDATE wallet_sessions SET funding_broadcast_at = updated_at
+            WHERE funding_signature IS NOT NULL AND funding_broadcast_at IS NULL"""
+        )
+        connection.execute(
+            """UPDATE wallet_sessions SET payment_broadcast_at = updated_at
+            WHERE payment_signature IS NOT NULL AND payment_broadcast_at IS NULL"""
+        )
 
 
 def get_db() -> sqlite3.Connection:
