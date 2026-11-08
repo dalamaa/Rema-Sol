@@ -30,21 +30,27 @@ def test_home_and_merchant_pages_render(client):
 
 
 def test_shared_public_navigation_and_compact_product_cta(client, product):
-    expected_links = (
-        'href="/"',
-        'href="/demo"',
-        'href="/p/the-digital-creator-s-guide"',
-        'href="/wallet"',
-        'href="/recover"',
-    )
     for path in ("/", "/demo", f"/p/{product['slug']}", "/wallet", "/recover"):
         html = client.get(path).get_data(as_text=True)
         nav = re.search(r'<nav class="main-nav".*?</nav>', html, re.S).group(0)
         assert "data-site-nav" in nav
         assert 'aria-controls="site-nav-panel"' in nav
-        assert all(link in nav for link in expected_links)
+        assert 'href="/"' in nav
+        assert 'href="/demo"' in nav
+        expected_how_it_works = (
+            'href="#lifecycle">How It Works'
+            if path == "/demo"
+            else 'href="/#how-it-works">How It Works'
+        )
+        assert expected_how_it_works in nav
+        assert 'href="/merchant/login">Merchant Login' in nav
+        assert 'href="/p/the-digital-creator-s-guide"' not in nav
+        assert 'href="/wallet"' not in nav
+        assert 'href="/recover"' not in nav
+        assert "Ebook" not in nav
+        assert "Test Wallet" not in nav
+        assert "Recover" not in nav
         assert 'target="_blank"' not in nav
-        assert "Merchant Login" in nav
 
     product_html = client.get(f"/p/{product['slug']}").get_data(as_text=True)
     assert product_html.count("Create checkout") == 1
@@ -67,6 +73,8 @@ def test_shared_public_navigation_and_compact_product_cta(client, product):
     assert "0.003" in demo_html
     assert "Preview of the demo case" in demo_html
     assert "no refund has occurred" in demo_html
+    for route in ('href="/p/the-digital-creator-s-guide"', 'href="/wallet"', 'href="/recover"'):
+        assert route in demo_html
 
 
 def test_authenticated_navigation_exposes_merchant_sections(client):

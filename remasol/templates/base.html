@@ -27,10 +27,12 @@
         <div class="main-nav-panel" id="site-nav-panel">
           <div class="nav-primary">
             <a class="{{ 'is-active' if request.endpoint == 'main.home' else '' }}" href="{{ url_for('main.home') }}">Home</a>
+            {% if request.endpoint == 'main.demo_wallet' %}
+              <a href="#lifecycle">How It Works</a>
+            {% else %}
+              <a href="{{ url_for('main.home') }}#how-it-works">How It Works</a>
+            {% endif %}
             <a class="{{ 'is-active' if request.endpoint == 'main.demo_wallet' else '' }}" href="{{ url_for('main.demo_wallet') }}">Demo</a>
-            <a class="{{ 'is-active' if request.path.startswith('/p/') or request.path.startswith('/checkout/') else '' }}" href="{{ url_for('main.product_checkout', slug='the-digital-creator-s-guide') }}">Ebook</a>
-            <a class="{{ 'is-active' if request.path.startswith('/wallet') else '' }}" href="{{ url_for('main.test_wallet') }}">Test Wallet</a>
-            <a class="{{ 'is-active' if request.path.startswith('/recover') or request.path.startswith('/receipt') else '' }}" href="{{ url_for('main.recover') }}">Recover</a>
           </div>
           <div class="nav-merchant">
             <span class="nav-divider" aria-hidden="true"></span>
