@@ -162,7 +162,16 @@ def status_label(value):
 
 @bp.route("/")
 def home():
-    return render_template("home.html", **template_context())
+    return render_template(
+        "home.html",
+        **template_context(
+            page_title="RemaSol | SOL overpayment recovery",
+            meta_description=(
+                "RemaSol helps small merchants handle eligible SOL overpayments on "
+                "Solana Devnet with guided customer recovery and less manual refund work."
+            ),
+        ),
+    )
 
 
 @bp.route("/merchant/login", methods=["GET", "POST"])
@@ -344,7 +353,16 @@ def create_checkout(slug):
 
 @bp.route("/demo")
 def demo_wallet():
-    return render_template("demo_guide.html", **template_context(title="Interactive demo"))
+    return render_template(
+        "demo_guide.html",
+        **template_context(
+            page_title="RemaSol Demo | Recover a SOL overpayment",
+            meta_description=(
+                "Run a Solana Devnet overpayment test, see RemaSol identify the exact excess, "
+                "and follow the eligible recovery and refund proof."
+            ),
+        ),
+    )
 
 
 @bp.route("/wallet")
@@ -746,13 +764,18 @@ def receipt(refund_id):
 
 def state_message(state: str, order: dict | None) -> str:
     if state == "eligible":
-        return "The payment is above the product price. The refundable excess is ready to return to the locked destination."
+        if order:
+            return (
+                f"RemaSol verified {order['payment_sol']} SOL sent to a {order['price_sol']} SOL checkout. "
+                f"The {order['excess_sol']} SOL excess can be requested below."
+            )
+        return "The verified payment includes an eligible excess that can be requested below."
     if state == "underpaid":
         return "This payment is below the product price. RemaSol will not create an automatic payout."
     if state == "exact":
         return "This payment exactly matches the product price. There is no excess to return."
     if state == "submitted":
-        return "The signed refund is on Devnet and waiting for finalization."
+        return "The signed refund is on Devnet and waiting for finalization. Do not submit another request."
     if state == "finalized":
         return "The refund transaction is finalized on Solana Devnet."
     if state == "needs_review":

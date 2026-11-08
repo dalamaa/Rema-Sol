@@ -27,10 +27,10 @@
     {% if error %}<div class="inline-error" role="alert">{{ icon('alert', 15) }} {{ error }}</div>{% endif %}
     <form method="post" action="{{ url_for('main.create_checkout', slug=product.slug) }}" class="product-cta-form" data-loading-text="Opening checkout…">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <button class="button button-primary product-cta" type="submit">Buy with SOL {{ icon('arrow-right', 17) }}</button>
+      <button class="button button-primary product-cta" type="submit">Create checkout {{ icon('arrow-right', 17) }}</button>
     </form>
     <div class="product-purchase-meta"><span class="product-network-label">{{ icon('shield', 14) }} Solana Devnet</span></div>
-    <p class="product-note">A private checkout room is created next with the exact payment address and your private claim code.</p>
+    <p class="product-note">Create a private checkout next. It includes the exact payment address and private Merchant Code for recovery.</p>
   </div>
 </section>
 

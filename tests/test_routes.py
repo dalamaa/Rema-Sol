@@ -47,23 +47,25 @@ def test_shared_public_navigation_and_compact_product_cta(client, product):
         assert "Merchant Login" in nav
 
     product_html = client.get(f"/p/{product['slug']}").get_data(as_text=True)
-    assert product_html.count("Buy with SOL") == 1
+    assert product_html.count("Create checkout") == 1
     assert "Solana Devnet" in product_html
     assert "RemaSol storefront" not in product_html
     assert "product-secondary" in product_html
 
     demo_html = client.get("/demo").get_data(as_text=True)
-    assert "Send too much SOL. Get the extra back." in demo_html
-    assert "See how RemaSol helps customers recover eligible overpayments without a support ticket." in demo_html
-    assert 'href="#lifecycle">How It Works' in demo_html
+    assert "<title>RemaSol Demo | Recover a SOL overpayment</title>" in demo_html
+    assert 'name="description" content="Run a Solana Devnet overpayment test, see RemaSol identify the exact excess, and follow the eligible recovery and refund proof."' in demo_html
+    assert "A customer pays too much SOL. See how RemaSol handles the refund." in demo_html
+    assert "Run a real test on Solana Devnet." in demo_html
+    assert 'href="#lifecycle">See the four steps' in demo_html
     assert 'target="_blank" rel="noopener noreferrer"' in demo_html
-    assert demo_html.count('target="_blank" rel="noopener noreferrer"') == 4
-    for label in ("Product price", "Amount sent", "Eligible excess", "Checkout", "Pay", "Recover", "Refund"):
+    assert demo_html.count('target="_blank" rel="noopener noreferrer"') == 5
+    for label in ("Product price", "Amount sent", "Eligible excess", "Checkout", "Test Wallet", "Recovery", "Refund"):
         assert label in demo_html
     assert "0.002" in demo_html
     assert "0.005" in demo_html
     assert "0.003" in demo_html
-    assert "Illustrative only" in demo_html
+    assert "Preview of the demo case" in demo_html
     assert "no refund has occurred" in demo_html
 
 
@@ -121,7 +123,7 @@ def test_customer_flow_creates_a_payment_only_checkout(client, product):
     product_page = client.get(f"/p/{product['slug']}")
     product_html = product_page.get_data(as_text=True)
     assert product_page.status_code == 200
-    assert "Buy with SOL" in product_html
+    assert "Create checkout" in product_html
     assert "Protect against overpayment" not in product_html
 
     checkout_page = client.post(
@@ -152,13 +154,13 @@ def test_exchange_refund_guidance_is_visible_before_recovery_action(client, prod
         data={"csrf_token": token},
         follow_redirects=True,
     ).get_data(as_text=True)
-    exchange_note = "For easier refunds, pay from a Solana wallet you control."
+    exchange_note = "Running the public demo? Keep this page open, then open Test Wallet"
     assert exchange_note in checkout
     assert checkout.index("payment-refund-note") < checkout.index("payment-actions")
 
     recovery = client.get("/recover").get_data(as_text=True)
-    assert "does not guarantee that your exchange account receives the funds" in recovery
-    assert "cannot reliably identify every exchange wallet" in recovery
+    assert "cannot guarantee that an exchange credits a refund" in recovery
+    assert "Exchange-origin or otherwise uncertain payments may require manual review." in recovery
     assert recovery.index("Exchange withdrawal note") < recovery.index("Check eligibility")
 
 
@@ -217,7 +219,7 @@ def test_test_wallet_is_separate_and_only_sends_to_active_checkouts(client, app,
     token = csrf(client)
     demo_page = client.get("/demo")
     assert demo_page.status_code == 200
-    assert "Send too much SOL. Get the extra back." in demo_page.get_data(as_text=True)
+    assert "A customer pays too much SOL. See how RemaSol handles the refund." in demo_page.get_data(as_text=True)
     assert "Merchant Code" not in client.get("/wallet").get_data(as_text=True)
 
     created = client.post("/wallet/create", data={"csrf_token": token})
@@ -344,7 +346,7 @@ def test_test_wallet_shows_per_payment_limit_without_balance_display(client, app
     assert "Merchant Code" not in wallet_html
 
     test_page = client.get(created.location).get_data(as_text=True)
-    assert "Send free Devnet SOL to a RemaSol checkout." in test_page
+    assert "Use a temporary, app-controlled buyer wallet to send a capped Devnet payment to the checkout." in test_page
     assert "Allocated today" not in test_page
     assert "Still unrecovered" not in test_page
     assert "Actual temporary wallet balance" not in test_page

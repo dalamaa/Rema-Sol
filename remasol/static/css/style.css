@@ -932,7 +932,12 @@ td strong { color: var(--text); font-size: 13px; font-weight: 500; }
 .demo-guide-close { display: grid; grid-template-columns: 1.1fr .9fr; align-items: end; gap: 70px; padding-block: 80px 105px; border-top: 1px solid var(--line); }
 .demo-guide-close h2 { margin: 21px 0 0; font-size: clamp(33px, 4vw, 50px); line-height: 1.1; letter-spacing: -.05em; font-weight: 500; }
 .demo-guide-close h2 span { color: var(--gold); }
-.demo-guide-close > p { max-width: 350px; margin: 0 0 5px; color: var(--muted); font-size: 14px; line-height: 1.65; }
+.demo-guide-close-cta { max-width: 350px; display: grid; gap: 18px; align-items: start; }
+.demo-guide-close-cta p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.65; }
+.demo-guide-close-cta .button { justify-self: start; }
+.transaction-proof-dual { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
+.transaction-proof-item { width: 100%; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; }
+.transaction-proof-item .button { margin-top: 18px; }
 
 @media (max-width: 1020px) {
   .demo-guide-hero { grid-template-columns: minmax(0, .95fr) minmax(360px, .85fr); gap: 45px; }
@@ -947,7 +952,7 @@ td strong { color: var(--text); font-size: 13px; font-weight: 500; }
   .demo-guide-hero-copy { max-width: 680px; }
   .demo-guide-hero-visual { min-height: 430px; }
   .demo-guide-section-heading, .demo-guide-close { grid-template-columns: 1fr; gap: 25px; }
-  .demo-guide-section-heading > p, .demo-guide-close > p { max-width: 560px; }
+  .demo-guide-section-heading > p, .demo-guide-close-cta { max-width: 560px; }
   .demo-lifecycle { grid-template-columns: repeat(2, 1fr); gap: 39px 0; }
   .demo-lifecycle::before { display: none; }
   .demo-step:nth-child(3) { border-left: 0; padding-left: 0; }
@@ -989,6 +994,8 @@ td strong { color: var(--text); font-size: 13px; font-weight: 500; }
   .demo-compare-grid { grid-template-columns: 1fr; margin-top: 35px; }
   .demo-compare-card { padding-inline: 20px; }
   .demo-guide-close { gap: 21px; padding-block: 69px 82px; }
+  .demo-guide-close-cta .button { width: 100%; }
+  .transaction-proof-dual { grid-template-columns: 1fr; }
 }
 
 /* Demo guide: keep the action, example, and lifecycle in the first view. */
@@ -1017,6 +1024,7 @@ td strong { color: var(--text); font-size: 13px; font-weight: 500; }
 .demo-guide-lifecycle-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 30px; }
 .demo-guide-lifecycle-heading .eyebrow { flex: 0 0 auto; }
 .demo-guide-lifecycle-heading p { margin: 0; color: var(--muted); font-size: 13px; }
+.demo-guide-lifecycle-note { max-width: 420px; color: var(--dim) !important; font: 10px/1.45 var(--mono) !important; }
 .demo-lifecycle { margin-top: 19px; }
 .demo-step { padding-right: 10px; }
 .demo-step + .demo-step { padding-left: 10px; }

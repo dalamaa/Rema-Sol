@@ -3,18 +3,18 @@
 <section class="recovery-hero section-wrap">
   <div>
     <div class="eyebrow"><span class="eyebrow-line"></span> Self-service recovery</div>
-    <h1>Return the extra without opening a support ticket.</h1>
-    <p>Use the payment room, your private claim code, and the original transaction signature. RemaSol checks all three before it shows payment details.</p>
+    <h1>Check whether your overpayment can be recovered.</h1>
+    <p>Enter the Merchant Code from checkout, the sender wallet used for payment, and the payment transaction ID. RemaSol verifies all three on Solana before showing the exact excess. Eligible payments can continue to a locked refund destination; uncertain payments go to manual review.</p>
   </div>
   <div class="recovery-seal">{{ icon('shield', 26) }}<span>Public proof<br><strong>Private access</strong></span></div>
 </section>
 
-<section class="warning-band section-wrap recovery-warning-top"><div class="warning-icon">{{ icon('alert', 18) }}</div><div><strong>Exchange withdrawal note</strong><p>If you paid directly from an exchange, a refund to an exchange-controlled wallet does not guarantee that your exchange account receives the funds. RemaSol can verify the on-chain source, but cannot reliably identify every exchange wallet; some payments may require manual review.</p></div></section>
+<section class="warning-band section-wrap recovery-warning-top"><div class="warning-icon">{{ icon('alert', 18) }}</div><div><strong>Exchange withdrawal note</strong><p>RemaSol can verify the on-chain transfer, but cannot guarantee that an exchange credits a refund. Exchange-origin or otherwise uncertain payments may require manual review.</p></div></section>
 
 <section class="recovery-grid section-wrap">
   <div class="panel recovery-form-panel">
     <div class="panel-heading"><div><span class="panel-kicker">Check eligibility</span><h2>Find your payment</h2></div><span class="step-count">1</span></div>
-    <p class="card-lede">Recovery checks the private Merchant Code, the sender wallet, and the finalized Solana transaction together. Your locked refund destination is never editable here.</p>
+    <p class="card-lede">Paste the three values from the checkout and Test Wallet. Recovery checks the Merchant Code, sender wallet, and finalized Solana transaction together. The refund destination is locked and cannot be edited here.</p>
     <form method="post" action="{{ url_for('main.check_recovery') }}" class="stack-form" data-loading-text="Checking eligibility…">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <label>Merchant Code<input type="password" name="merchant_code" value="{{ merchant_code or '' }}" placeholder="Paste the private code from checkout" autocomplete="off" spellcheck="false" required></label>
@@ -32,7 +32,7 @@
         <div class="eligibility-amount"><span>Refundable excess</span><strong>{{ order.excess_sol }} <small>SOL</small></strong><div>Product price {{ order.price_sol }} SOL · received {{ order.payment_sol }} SOL</div></div>
         <div class="locked-destination result-destination"><span class="destination-icon">{{ icon('lock', 15) }}</span><div><span>Returning to locked destination</span><code>{{ order.refund_destination }}</code></div></div>
         <form method="post" action="{{ url_for('main.request_recovery') }}" class="request-form" data-loading-text="Submitting one refund…"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="merchant_code" value="{{ merchant_code }}"><input type="hidden" name="sender_address" value="{{ sender_address }}"><input type="hidden" name="signature" value="{{ signature }}"><button class="button button-gold button-full" type="submit">Request {{ order.excess_sol }} SOL refund {{ icon('arrow-right', 16) }}</button></form>
-        <p class="action-note">The refund amount is fixed by the verified excess. The merchant's retained proceeds cover the network fee for this demo.</p>
+        <p class="action-note">The amount is fixed by the verified excess. One request creates one refund record; uncertain outcomes stay in review.</p>
       {% elif order and state in ['submitted', 'finalized', 'needs_review'] %}
         <div class="status-summary"><div><span>Refund amount</span><strong>{{ order.refund_amount_lamports|sol }} SOL</strong></div><div><span>Destination</span><code>{{ order.refund_destination|short }}</code></div>{% if order.transaction_signature %}<div><span>Transaction</span><a href="https://explorer.solana.com/tx/{{ order.transaction_signature }}?cluster=devnet" target="_blank" rel="noreferrer">{{ order.transaction_signature|short }} {{ icon('external', 13) }}</a></div>{% endif %}</div>
       {% elif order and state == 'underpaid' %}

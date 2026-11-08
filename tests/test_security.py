@@ -131,3 +131,51 @@ def test_finalized_receipt_route_renders_on_chain_proof(client, engine, product,
     assert response.status_code == 200
     assert b"Refund finalized" in response.data
     assert b"refund-signature-1" in response.data
+
+
+def test_receipt_labels_and_payment_refund_proof_follow_refund_state(
+    client, engine, product, fake_solana
+):
+    cases = (
+        ("receipt-finalized", "finalized", "Refunded excess", b"Refund finalized"),
+        ("receipt-pending", "confirmed", "Refund pending finalization", b"Refund submitted"),
+        ("receipt-review", "unknown", "Refund amount under review", b"Refund needs review"),
+    )
+
+    for payment_signature, chain_status, amount_label, heading in cases:
+        order, claim_code = create_order(engine, product, fake_solana)
+        fake_solana.payments[payment_signature] = {
+            "destination": order["payment_address"],
+            "amount": 500_000_000,
+        }
+        order, verification = engine.verify_payment(
+            order["id"], claim_code, payment_signature
+        )
+        assert verification.state == "overpayment"
+
+        if chain_status == "confirmed":
+            fake_solana.refund_status = "confirmed"
+        elif chain_status == "unknown":
+            fake_solana.refund_status = "unknown"
+            fake_solana.broadcast_timeout = True
+        else:
+            fake_solana.refund_status = "finalized"
+            fake_solana.broadcast_timeout = False
+
+        refunded, state = engine.request_refund(
+            order["id"], claim_code, payment_signature
+        )
+        expected_state = "finalized" if chain_status == "finalized" else "submitted" if chain_status == "confirmed" else "needs_review"
+        assert state == expected_state
+
+        with client.session_transaction() as session:
+            session["receipt_access"] = refunded["refund_id"]
+        response = client.get(f"/receipt/{refunded['refund_id']}")
+
+        assert response.status_code == 200
+        assert heading in response.data
+        assert amount_label.encode() in response.data
+        assert b"Original payment" in response.data
+        assert b"Refund transaction" in response.data
+        assert f"https://explorer.solana.com/tx/{payment_signature}?cluster=devnet".encode() in response.data
+        assert f"https://explorer.solana.com/tx/{refunded['transaction_signature']}?cluster=devnet".encode() in response.data

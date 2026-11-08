@@ -27,7 +27,7 @@
         </div>
       </div>
 
-      <p class="payment-refund-note checkout-refund-note" role="note">For easier refunds, pay from a Solana wallet you control. Exchange withdrawals may need manual review if you overpay.</p>
+      <p class="payment-refund-note checkout-refund-note" role="note">Running the public demo? Keep this page open, then open Test Wallet and paste this unique payment address. For easier refunds, pay from a Solana wallet you control. Unverified or exchange-origin overpayments may require manual review.</p>
     </main>
 
     <aside class="checkout-side">
@@ -48,11 +48,12 @@
         <div class="checkout-code-block">
           <div class="checkout-code-heading"><span>Private Merchant Code</span></div>
           <div class="claim-code" data-copy="{{ claim_code }}"><span>{{ claim_code }}</span><button type="button" class="copy-button" aria-label="Copy private Merchant Code">{{ icon('copy', 15) }} Copy Code</button></div>
-          <p class="checkout-save-note">Save this code with your transaction ID.</p>
+          <p class="checkout-save-note">Save this code. Recovery also needs the sender wallet address and payment transaction ID.</p>
         </div>
         {% endif %}
 
         <div class="payment-actions">
+          <a class="button button-primary" href="{{ url_for('main.test_wallet') }}" target="_blank" rel="noopener noreferrer">Open Test Wallet {{ icon('arrow-up-right', 14) }}</a>
           <a class="button button-quiet" href="solana:{{ order.payment_address }}?amount={{ order.price_sol }}">{{ icon('wallet', 16) }} Pay with Solana Pay</a>
           <span class="payment-network">{{ icon('shield', 14) }} Solana Devnet · native SOL</span>
         </div>
