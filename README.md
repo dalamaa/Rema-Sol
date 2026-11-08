@@ -103,6 +103,8 @@ An exchange withdrawal may come from an exchange-controlled hot wallet. RemaSol 
 
 Before mainnet use, add a production key-management system, a durable distributed limiter, monitoring and reconciliation workers, explicit treasury/liability accounting, manual review tooling, policy controls, a formal threat model, and an audited transaction-building path. The MVP merchant login is suitable for a controlled demo, not a complete production identity system. Do not call this MVP production-ready.
 
+Guided underpayment resolution is future work. The current MVP can classify and record an underpayment, but it does not guide a customer through a top-up, combine multiple transfers, or create an automatic follow-up payment.
+
 ## VPS deployment
 
 The repository includes a Gunicorn systemd unit, Nginx HTTPS reverse-proxy configuration, and a deployment checklist in [`deploy/README.md`](deploy/README.md). The service binds only to `127.0.0.1`, stores SQLite under `/var/lib/remasol`, loads secrets from `/etc/remasol/remasol.env`, enables secure cookies, and trusts forwarded client identity only when `REMA_SOL_TRUST_PROXY=1` is set behind Nginx.
